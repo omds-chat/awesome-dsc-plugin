@@ -1,0 +1,20 @@
+{
+  "name": "awesome-dsc-plugin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "dsc 社区精选插件索引: 提供插件清单、产物构建与 Pages 部署",
+  "license": "Apache-2.0",
+  "homepage": "https://omdsc-dev.github.io/awesome-dsc-plugin/index.json",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/omdsc-dev/awesome-dsc-plugin.git"
+  },
+  "scripts": {
+    "build": "node scripts/build-index.mjs",
+    "build:artifacts": "node .github/scripts/build-artifacts.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
