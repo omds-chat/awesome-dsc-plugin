@@ -15,7 +15,7 @@
 | `author` | string | 是 | 作者或组织名 |
 | `homepage` | string | 是 | http 或 https 地址 |
 | `download` | string | 是 | https 分发地址,或本仓库相对路径 |
-| `manifest` | object | 否 | 插件清单。省略时由 dsce 使用产物导出的 `manifest` |
+| `manifest` | object | 否 | 插件清单。省略时由 DeepSeek-Chat-Enhanced 使用产物导出的 `manifest` |
 | `repo` | string | 否 | 插件源码仓库,CI 据此构建产物 |
 
 ## 取值规则

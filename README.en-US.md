@@ -2,7 +2,7 @@
 
 [简体中文](README.md)
 
-A curated collection of dsc community plugins: it provides the plugin index and distribution entry for the built-in marketplace of DeepSeek-Chat-Enhanced(hereafter dsce).
+A curated collection of dsc community plugins: it provides the plugin index and distribution entry for the built-in marketplace of DeepSeek-Chat-Enhanced.
 
 ## Positioning
 
@@ -13,9 +13,9 @@ This repository does two things:
 
 This repository does not host plugin sources, does not own plugin repositories, and does not audit plugin implementations.
 
-## How the index is consumed by the dsce marketplace
+## How the index is consumed by the DeepSeek-Chat-Enhanced marketplace
 
-The built-in `dsc-market` plugin of dsce fetches by default:
+The built-in `dsc-market` plugin of DeepSeek-Chat-Enhanced fetches by default:
 
 ```text
 https://omdsc-dev.github.io/awesome-dsc-plugin/index.json
@@ -45,7 +45,7 @@ Rules:
 
 - `schemaVersion` must be 1.
 - Every `plugins` item must carry `id`,`name`,`version`,`description`,`author`,`homepage` and `download`;`manifest` is optional.
-- Items with missing fields or wrong types are skipped by dsce. This repository therefore validates every entry before writing the index and exits with a non-zero code instead of producing a broken index.
+- Items with missing fields or wrong types are skipped by DeepSeek-Chat-Enhanced. This repository therefore validates every entry before writing the index and exits with a non-zero code instead of producing a broken index.
 
 ## Directory layout
 
@@ -94,7 +94,7 @@ awesome-dsc-plugin/
 | `plugins[].author` | string | yes | Author or organization, non-empty |
 | `plugins[].homepage` | string | yes | http or https address |
 | `plugins[].download` | string | yes | https download address, or a repository-relative path |
-| `plugins[].manifest` | object | no | Plugin manifest; dsce falls back to the manifest exported by the artifact |
+| `plugins[].manifest` | object | no | Plugin manifest; DeepSeek-Chat-Enhanced falls back to the manifest exported by the artifact |
 
 ## Build and local preview
 

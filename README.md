@@ -2,7 +2,7 @@
 
 [English](README.en-US.md)
 
-dsc 社区精选插件合集: 为 DeepSeek-Chat-Enhanced(下称 dsce)的内置市场提供插件索引与分发入口。
+dsc 社区精选插件合集: 为 DeepSeek-Chat-Enhanced 的内置市场提供插件索引与分发入口。
 
 ## 项目定位
 
@@ -13,9 +13,9 @@ dsc 社区精选插件合集: 为 DeepSeek-Chat-Enhanced(下称 dsce)的内置�
 
 本仓库不保存插件源码,不代管插件仓库,不对插件实现做审计。
 
-## 索引如何被 dsce 市场消费
+## 索引如何被 DeepSeek-Chat-Enhanced 的内置市场消费
 
-dsce 的内置插件 `dsc-market` 默认拉取:
+DeepSeek-Chat-Enhanced 的内置插件 `dsc-market` 默认拉取:
 
 ```text
 https://omdsc-dev.github.io/awesome-dsc-plugin/index.json
@@ -45,7 +45,7 @@ https://omdsc-dev.github.io/awesome-dsc-plugin/index.json
 
 - `schemaVersion` 必须为 1。
 - `plugins` 每项必须含 `id`、`name`、`version`、`description`、`author`、`homepage`、`download`,`manifest` 可选。
-- 字段缺失或类型不符的条目会被 dsce 跳过。因此本仓库在写出索引前逐条校验,校验不通过即以非零退出码结束,不产出坏索引。
+- 字段缺失或类型不符的条目会被 DeepSeek-Chat-Enhanced 跳过。因此本仓库在写出索引前逐条校验,校验不通过即以非零退出码结束,不产出坏索引。
 
 ## 目录结构
 
@@ -94,7 +94,7 @@ awesome-dsc-plugin/
 | `plugins[].author` | string | 是 | 作者或组织名,非空 |
 | `plugins[].homepage` | string | 是 | http 或 https 地址 |
 | `plugins[].download` | string | 是 | https 分发地址,或本仓库相对路径 |
-| `plugins[].manifest` | object | 否 | 插件清单,省略时由 dsce 使用产物导出的清单 |
+| `plugins[].manifest` | object | 否 | 插件清单,省略时由 DeepSeek-Chat-Enhanced 使用产物导出的清单 |
 
 ## 构建与本地预览
 
