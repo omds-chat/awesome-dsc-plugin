@@ -1,20 +1,28 @@
 {
   "name": "awesome-dsc-plugin",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "dsc 社区精选插件索引: 提供插件清单、产物构建与 Pages 部署",
+  "description": "dsc 社区插件合集: 按分发规范 v2 收录、签名并分发插件",
   "license": "Apache-2.0",
-  "homepage": "https://omdsc-dev.github.io/awesome-dsc-plugin/index.json",
+  "homepage": "https://omdsc-dev.github.io/awesome-dsc-plugin/",
   "repository": {
     "type": "git",
     "url": "https://github.com/omdsc-dev/awesome-dsc-plugin.git"
   },
-  "scripts": {
-    "build": "node scripts/build-index.mjs",
-    "build:artifacts": "node .github/scripts/build-artifacts.mjs"
-  },
   "engines": {
-    "node": ">=18"
-  }
+    "node": ">=20"
+  },
+  "scripts": {
+    "import": "node .github/scripts/import-plugins.mjs --manifest .github/plugins-sources.json",
+    "verify": "node scripts/verify-collection.mjs --dir . --allow-empty-trust-sign",
+    "verify:strict": "node scripts/verify-collection.mjs --dir .",
+    "build": "node scripts/build-collection.mjs --dir . --allow-empty-trust-sign --out dist",
+    "sign": "node scripts/build-collection.mjs --dir . --sign --out dist"
+  },
+  "keywords": [
+    "dsc",
+    "dsc-plugin",
+    "plugin-collection"
+  ]
 }

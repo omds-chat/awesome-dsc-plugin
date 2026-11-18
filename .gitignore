@@ -3,6 +3,9 @@ dist/
 temp/
 *.log
 .DS_Store
+.env
+.env.*
+!.env.example
 AGENTS.md
 .agent/
 .agents/

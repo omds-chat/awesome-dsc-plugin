@@ -1,135 +1,148 @@
-# Awesome dsc Plugin
+# awesome-dsc-plugin
+
+The community plugin collection for dsc. Plugins are indexed, signed and distributed here under distribution specification v2, and the plugin market reads this collection's manifests and public key to consume them.
 
 [简体中文](README.md)
 
-A curated collection of dsc community plugins: it provides the plugin index and distribution entry for the built-in marketplace of DeepSeek-Chat-Enhanced.
+## Scope
 
-## Positioning
+This collection carries runtime plugins for dsc. It is maintained by omdsc-dev and follows the same trust signature model as any other plugin collection.
 
-This repository does two things:
+A plugin is accepted when:
 
-- Maintains the plugin index `index.json`, recording the identifier, name, version, description, author, homepage and download address of every listed plugin.
-- On release, CI pulls the sources of plugins that declare a repository address, builds their artifacts, and deploys them together with the index file to the Pages environment.
+- its artifact is a single browser ESM script that exports `activate(context)` and depends on neither Node built-ins nor a backend API;
+- it comes with a buildable source repository or a reachable artifact, and `pnpm build` can reproduce it;
+- its runtime metadata `meta.json` is complete and the plugin name matches `dsc-xxx` or `@scope/dsc-xxx`.
 
-This repository does not host plugin sources, does not own plugin repositories, and does not audit plugin implementations.
+Plugins that need a backend, need native modules, or cannot be rebuilt in CI are not accepted.
 
-## How the index is consumed by the DeepSeek-Chat-Enhanced marketplace
-
-The built-in `dsc-market` plugin of DeepSeek-Chat-Enhanced fetches by default:
-
-```text
-https://omdsc-dev.github.io/awesome-dsc-plugin/index.json
-```
-
-Index shape(excerpt, format illustration only; the `dsc-demo-log` id in the excerpt is a placeholder, not a listed plugin):
-
-```json
-{
-  "schemaVersion": 1,
-  "plugins": [
-    {
-      "id": "dsc-demo-log",
-      "name": "Demo Log",
-      "version": "0.1.0",
-      "description": "示例插件",
-      "author": "omdsc-dev",
-      "homepage": "https://github.com/omdsc-dev/dsc-plugin-template",
-      "download": "https://omdsc-dev.github.io/awesome-dsc-plugin/plugins/dsc-demo-log.js",
-      "manifest": {}
-    }
-  ]
-}
-```
-
-Rules:
-
-- `schemaVersion` must be 1.
-- Every `plugins` item must carry `id`,`name`,`version`,`description`,`author`,`homepage` and `download`;`manifest` is optional.
-- Items with missing fields or wrong types are skipped by DeepSeek-Chat-Enhanced. This repository therefore validates every entry before writing the index and exits with a non-zero code instead of producing a broken index.
+Being listed is not a certification. The collection guarantees only that distributed content matches its signatures, and does not audit plugin behaviour.
 
 ## Directory layout
+
+Distribution specification v2 is deliberately tightly coupled: manifests, keys, signatures and plugin payloads all live on one origin, which removes cross-origin injection paths.
 
 ```text
 awesome-dsc-plugin/
 ├── .github/
-│   ├── workflows/
-│   │   └── build-and-deploy.yml
-│   └── scripts/
-│       └── build-artifacts.mjs
+│   ├── plugins-sources.json            source manifest, the only input that decides what is listed
+│   ├── plugins-sources.README.md       field reference for the manifest
+│   ├── scripts/import-plugins.mjs      build and import plugins from the manifest
+│   └── workflows/build-and-deploy.yml  verify, sign, commit distribution content, publish
+├── .gitattributes                      enforce LF line endings
 ├── .gitignore
 ├── LICENSE
 ├── README.md
 ├── README.en-US.md
+├── meta.json                           collection metadata, download counting switch
+├── plugin_secret.pub                   collection public key, rewritten by CI from the private key
+├── plugin_set_sign.json                dsc trust signature for this collection
+├── datalog.json                        plugin catalogue, keyed by plugin name
+├── tags.json                           preset tags
 ├── package.json
+├── pnpm-lock.yaml
+├── pnpm-workspace.yaml
 ├── plugins/
-│   └── README.md
+│   ├── author_manifest.json            registered authors
+│   └── <author>/
+│       ├── plugin_secret.pub           that author's public key
+│       ├── plugin_manifest.json        that author's plugin list
+│       └── <plugin>/
+│           ├── versions.json           version list
+│           └── <x.y.z>/
+│               ├── meta.json           plugin runtime metadata
+│               ├── plugin.js           plugin runtime script
+│               └── plugin_sign.json    collection signature and author self-signature
 └── scripts/
-    └── build-index.mjs
+    ├── sign.mjs                        Ed25519 hash-then-sign primitives
+    ├── lib/collection-verify.mjs       shared verification logic
+    ├── build-collection.mjs            verify, sign and produce dist/
+    └── verify-collection.mjs           read-only consistency check
 ```
 
-## Inclusion criteria
+Naming rules and required files are in [plugins/README.md](plugins/README.md).
 
-- The artifact follows the dsc plugin product specification: a single browser ESM js file exporting `activate(context)`, without Node built-in modules or backend endpoints.
-- The entry provides a reachable https download address, or a buildable repository address(declared through `repo`,where `pnpm build` produces `dist/plugin.js`).
-- The entry `id` matches `^[a-z][a-z0-9-]{2,63}$` and `version` is three numeric segments.
-- The plugin does not bypass the engine to reach host internal objects, does not collect user data, and does not issue implicit network requests.
-- The author maintains the plugin and responds to user questions.
+## Collection metadata
 
-## Submitting a plugin
+The root `meta.json` declares the download counting switch only:
 
-- Add `<id>.json` under `plugins/`;fields and value rules are described in [plugins/README.md](plugins/README.md).
-- Run `pnpm build` and confirm the entry appears in `dist/index.json` with validation passing.
-- Open a pull request against `main` for maintainer review.
+| Field | Current value | Meaning |
+|:---:|:---:|:---:|
+| `DOWNLOAD_COUNT_ENABLE` | `false` | When `true`, the market fires one fire-and-forget POST per download and tells users this source counts downloads |
+| `DOWNLOAD_COUNT_API` | absent | Counting endpoint, required only when counting is on |
+| `API_NEED_IP` | `false` | Whether the counting request carries the caller's public IP |
 
-## Index field reference
+Counting is currently off for this collection.
 
-| Field | Type | Required | Description |
-|:---:|:---:|:---:|:---:|
-| `schemaVersion` | number | yes | Always 1 |
-| `plugins` | array | yes | Plugin items sorted by `id` in lexicographic order |
-| `plugins[].id` | string | yes | Plugin identifier matching `^[a-z][a-z0-9-]{2,63}$` |
-| `plugins[].name` | string | yes | Display name, non-empty |
-| `plugins[].version` | string | yes | Three numeric segments such as `0.1.0` |
-| `plugins[].description` | string | yes | One-line description, non-empty |
-| `plugins[].author` | string | yes | Author or organization, non-empty |
-| `plugins[].homepage` | string | yes | http or https address |
-| `plugins[].download` | string | yes | https download address, or a repository-relative path |
-| `plugins[].manifest` | object | no | Plugin manifest; DeepSeek-Chat-Enhanced falls back to the manifest exported by the artifact |
+## Trust chain
 
-## Build and local preview
+Three signing layers. Each layer signs only what the next one needs.
+
+| Layer | Signer | Private key | Signed object | Artifact |
+|:---:|:---:|:---:|:---:|:---:|
+| dsc | `dsc` | dsc key, never in this repository | bytes of the root `plugin_secret.pub` | `plugin_set_sign.json` |
+| Collection | `awesome-dsc-plugin` | `PLUGIN_PRIVATE_KEY` | `meta.json` and `plugin.js` of every version | `plugin_sign.json` inside the version directory |
+| Author | author name | `AUTHOR_SIGN_PRIVATE_KEY` | same files, optional | appended to the same `plugin_sign.json` |
+
+- The market embeds the dsc public key. It validates `plugin_set_sign.json` first, trusts this collection's `plugin_secret.pub` only after that, and then validates plugin signatures with it.
+- Delegation is not supported. This collection cannot issue a trust signature for another collection.
+- The algorithm is fixed to Ed25519 with hash-then-sign: SHA-512 over the file bytes, then sign the digest, base64 encoded.
+- Collection signatures and author self-signatures coexist in one `plugin_sign.json` and are told apart by the `signer` field. Author signatures verify against `plugins/<author>/plugin_secret.pub`, collection signatures against the root `plugin_secret.pub`.
+- A public key is always what the private key derives. CI derives it from `PLUGIN_PRIVATE_KEY` and overwrites `plugin_secret.pub`; the build fails when the derived key differs from the committed one.
+
+## How to get a plugin listed
+
+1. Open a pull request against `.github/plugins-sources.json`, one entry per plugin, with `repo`, an optional `ref`, `author` and `plugin`. Fields are documented in [plugins-sources.README.md](.github/plugins-sources.README.md).
+2. After merge, CI clones or copies the source into `temp/`, runs `pnpm install --frozen-lockfile` and `pnpm build`, writes `dist/meta.json` and `dist/plugin.js` into `plugins/<author>/<plugin>/<version>/`, then updates that plugin's `versions.json`, that author's `plugin_manifest.json` and the root `datalog.json`. An author self-signature shipped in the artifact is preserved.
+3. Add tags by hand. New catalogue entries start with an empty `tag` array and need tags picked from `tags.json`. Undeclared tags are rejected by verification.
+4. Merge and distribute. CI signs `meta.json` and `plugin.js` of every version with `PLUGIN_PRIVATE_KEY`, keeps author self-signatures, commits the changes to `plugins/`, `plugin_secret.pub` and `datalog.json` back to the repository, and publishes `dist/` to Pages.
+
+A failing step skips that one plugin and logs the reason; the rest still run.
+
+## How the plugin market consumes this collection
+
+The market reads collection metadata and the plugin catalogue first, then fetches version files by path. A single source usually gets several `base_url` entries: a mirrored CDN distribution service, `raw.githubusercontent.com`, and GitHub Pages, with the last two as fallbacks.
+
+| Step | Path | Purpose |
+|:---:|:---:|:---:|
+| 1 | `<base_url>/meta.json` | Check whether this source counts downloads |
+| 2 | `<base_url>/datalog.json` | List plugins, authors and tags |
+| 3 | `<base_url>/plugins/<author>/<plugin>/versions.json` | Read the version list and the latest version |
+| 4 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/meta.json` | Read plugin metadata |
+| 5 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/plugin.js` | Read the runtime script |
+| 6 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/plugin_sign.json` | Read signatures for that version |
+| 7 | `<base_url>/plugin_set_sign.json` and `<base_url>/plugin_secret.pub` | Verify the source and obtain the collection public key |
+
+The market stores the source type, script URL, public key and signature, and re-verifies signatures before running a plugin.
+
+## Cross-origin access
+
+This collection is hosted on GitHub Pages. Pages serves static assets with `Access-Control-Allow-Origin: *` by default, so all three `base_url` entries above are readable cross-origin, and the host side cannot narrow the allowed origins to a whitelist. That is platform behaviour, not a setting of this repository.
+
+The specification requires cross-origin access limited to trusted origins, including `https://omdsc-dev.github.io` at the very least. If distribution is moved to another host, configure a CORS whitelist there that allows that origin at minimum.
+
+## Local checks
 
 ```bash
 pnpm install
-pnpm build
+pnpm verify        # read-only consistency check, warns while the trust signature is empty
+pnpm build         # writes dist/ once verification passes
+pnpm run import    # import plugins from the source manifest
 ```
 
-`pnpm build` runs `node scripts/build-index.mjs`,which reads `plugins/*.json` and writes, after validation:
+- `pnpm verify` and `pnpm build` fall back to skeleton mode with a warning while no dsc trust signature exists. With a dsc public key configured, `pnpm verify:strict` checks strictly; pass the key through `DSC_PUBLIC_KEY` or `--trust-public-key`.
+- Use `pnpm run import`. `pnpm import` is a built-in pnpm command, not this repository's import script.
+- Run `pnpm sign` to sign plugins with `PLUGIN_PRIVATE_KEY` and produce `dist/`.
 
-- `dist/index.json`
-- `dist/plugins/<id>.json`
+## Security notes
 
-An empty directory produces `{ "schemaVersion": 1, "plugins": [] }` without failing.
-
-Preview the Pages content locally:
-
-```bash
-pnpm dlx serve dist
-```
-
-Build plugin artifacts(requires git and network access, reads `repo` from each entry):
-
-```bash
-node .github/scripts/build-artifacts.mjs
-```
-
-`PAGES_BASE_URL` overrides the Pages base address used when rewriting `download`.
-
-## Disclaimer
-
-- Inclusion is not certification. This repository only indexes and distributes; it does not review plugin code.
-- Plugins are maintained by their own authors, who are responsible for functionality, compatibility and security.
-- Plugins run on the browser main thread and can reach the current session content and stored API keys. Install only plugins from sources you trust, and use them at your own risk.
+- When a signature fails, the market warns the user and suggests downloading again. It does not run the plugin silently.
+- Being listed is not a certification. A signature proves the content matches its signer, not that the plugin behaviour was audited.
+- Keep private keys in CI secrets and local environment variables, never in the repository. `.gitignore` already excludes `.env`.
+- Replacing the collection key invalidates every trust signature dsc has issued, so a new one must be requested.
+- Signatures cover file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere.
+- Minify plugin artifacts. It reduces size and removes meaningless whitespace differences.
 
 ## License
 
-Apache-2.0, see [LICENSE](LICENSE).
+Apache License 2.0, see [LICENSE](LICENSE).
