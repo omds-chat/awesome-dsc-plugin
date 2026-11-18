@@ -29,7 +29,7 @@
 }
 ```
 
-- `latest` 必须出现在 `versions` 内;`versions` 按版本号降序排列且不得重复。
+- `latest` 必须出现在 `versions` 内;`versions` 由收录脚本按版本号降序写入且不重复,手工修改时保持同样的顺序。
 
 ## 版本目录
 
@@ -46,7 +46,7 @@
 
 CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范化。任何一字节差异(包括 LF 与 CRLF 的差别)都会让校验失败。
 
-`meta.json` 的必填字段:
+`meta.json` 的字段:
 
 | 字段 | 类型 | 说明 |
 |:---:|:---:|:---:|
@@ -57,6 +57,8 @@ CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范
 | `author` | string | 作者名 |
 | `repo_link` | string | 源码仓库链接 |
 | `dependencies` | object | 仅允许 `dsc` 一个键,值为 semver range |
+
+校验脚本强制 `name` 与 `version` 分别与 `datalog.json`、目录名一致;其余字段由分发规范 v2 要求,市场展示插件时读取。
 
 ## 目录示例
 

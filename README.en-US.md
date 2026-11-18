@@ -6,7 +6,7 @@ The community plugin collection for dsc. Plugins are indexed, signed and distrib
 
 ## Scope
 
-This collection carries runtime plugins for dsc and is maintained by omdsc-dev. This repository is currently the only end-entity signer (EEC) in omdsc-dev: it holds an end-entity signing certificate issued by the dsce root certificate authority and uses it to produce CMS detached signatures over the plugin files it lists.
+This collection carries runtime plugins for dsc and is maintained by omdsc-dev. This repository is the end-entity signer (EEC) for omdsc-dev: it holds an end-entity signing certificate issued by the root certificate authority of the DeepSeek-Chat-Enhanced repository and uses it to produce CMS detached signatures over the plugin files it lists.
 
 A plugin is accepted when:
 
@@ -26,7 +26,7 @@ The signing system is built on OpenSSL PKI. Three roles each hold one key, so it
 
 | Role | Held by | Holds | Signs |
 |:---:|:---:|:---:|:---:|
-| Certificate authority | the `dsce` repository | root private key (offline, never committed), root certificate | the end-entity certificate `eec.pem` |
+| Certificate authority | the `DeepSeek-Chat-Enhanced` repository (the organisation's main repository) | root private key (offline, never committed), root certificate | the end-entity certificate `eec.pem` |
 | End-entity signer (EEC) | this repository | EEC private key (CI secret `EEC_SECRET_KEY`), `eec.pem` | CMS detached signatures over plugin files |
 | Independent signer | plugin authors, omdsc-dev included | author key pair | bare-public-key detached signatures over plugin files |
 
@@ -35,7 +35,7 @@ The signing system is built on OpenSSL PKI. Three roles each hold one key, so it
 Trust starts at the root certificate and ends at the bytes of a plugin file.
 
 ```text
-dsce repository (root CA, offline)
+DeepSeek-Chat-Enhanced repository (root CA, offline)
   root_ca.crt
       │  issues
       ▼
@@ -55,7 +55,7 @@ dsce repository (root CA, offline)
 | Collection signature | CMS detached signature, `openssl cms -sign -binary -outform DER -nocerts -noattr`, stored as `<file>.sig`. Both signing and verification pass `-binary`, so raw bytes are signed without line-ending canonicalisation; the artifact is always DER and verification passes `-inform DER` |
 | Author signature | bare-public-key detached signature, `openssl pkeyutl -sign -rawin`, Ed25519 author keys |
 
-Both the root CA and the EEC must use ECDSA P-256. The root CA uses P-256 because certificate chain validation happens in the browser, WebCrypto support for P-256 is the broadest, and Ed25519 is unavailable on the target browser floor. The EEC uses P-256 because OpenSSL's CMS implementation reports `provider signature failure` when signing with an Ed25519 key, which makes Ed25519 unusable there.
+Neither curve is a preference but a hard constraint: switching to Ed25519 breaks chain validation or CMS verification on the target browsers and in OpenSSL, for the reasons listed in the table above.
 
 Signing and verification:
 
@@ -77,13 +77,13 @@ Author signatures are optional. When an author does not sign, that version carri
 
 ### Verification semantics
 
-- Verification before publishing is strict: `pnpm verify`, `pnpm build` and every CI step stop with a non-zero exit code on an error, so non-conforming content is never distributed.
+- Verification before publishing is strict: `pnpm build` and every CI step stop with a non-zero exit code on an error, so non-conforming content is never distributed. `pnpm verify` runs in skeleton mode by default and only warns when the certificate chain is missing, as described under Local checks.
 - Verification after distribution is lenient: when a web-file signature, a plugin signature or a certificate chain check fails, the plugin market **only warns**. It does not block, and it does not fall back to trusting anything. The user decides whether to continue.
 - Signatures cover raw file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere.
 
 ### How to request an EEC
 
-The EEC certificate is issued by the root CA in the dsce repository. This repository cannot self-sign it, and cannot issue certificates for other collections.
+The EEC certificate is issued by the root CA in the DeepSeek-Chat-Enhanced repository. This repository cannot self-sign it, and cannot issue certificates for other collections.
 
 1. Generate the EEC private key and a certificate signing request (CSR) locally, with the collection name as `CN`:
 
@@ -92,12 +92,12 @@ The EEC certificate is issued by the root CA in the dsce repository. This reposi
    openssl req -new -key eec_secret.pem -out eec.csr -subj '/O=omdsc-dev/CN=awesome-dsc-plugin'
    ```
 
-2. Submit `eec.csr` to the dsce repository (the root CA maintainers), stating the purpose, the requested validity and a contact.
+2. Submit `eec.csr` to the DeepSeek-Chat-Enhanced repository (the root CA maintainers), stating the purpose, the requested validity and a contact.
 3. Put the returned certificate in the repository root as `eec.pem`, replacing the placeholder.
 4. Put the contents of `eec_secret.pem` into the GitHub Actions secret `EEC_SECRET_KEY`. Never commit it.
 5. After merge, CI verifies the `eec.pem` chain against the root certificate. A broken chain, an expired certificate, or the wrong `keyUsage` or `basicConstraints` aborts the build.
 
-The root private key belongs to the offline environment of the dsce repository. Neither this repository nor its CI can or needs to reach it. The `eec.pem` currently in the repository is a placeholder: it was not issued by the root CA and must not be used for real signatures. Replace it before going live.
+The root private key belongs to the offline environment of the DeepSeek-Chat-Enhanced repository. Neither this repository nor its CI can or needs to reach it. The `eec.pem` committed in this repository is a placeholder: it was not issued by the root CA, must not be used for real signatures, and must be replaced before distribution.
 
 ## Directory layout
 
@@ -116,7 +116,7 @@ awesome-dsc-plugin/
 ├── README.en-US.md
 ├── eec.pem                             end-entity certificate, replaced once the root CA issues it
 ├── meta.json                           collection metadata, download counting switch
-├── datalog.json                        plugin catalogue, keyed by plugin name
+├── datalog.json                        plugin catalogue array, one entry per plugin (plugin_name, author, tag)
 ├── tags.json                           preset tags
 ├── package.json
 ├── pnpm-lock.yaml
@@ -142,24 +142,24 @@ awesome-dsc-plugin/
     └── import-plugins.mjs              build and import plugins from the manifest
 ```
 
-Naming rules and required files are in [plugins/README.md](plugins/README.md).
+Naming rules and required files are in [plugins/README.md](plugins/README.md). `dist/` and `temp/` are generated and not committed: the former is written by `pnpm build`, the latter is the import working area.
 
 ## Collection metadata
 
 The root `meta.json` declares the download counting switch only:
 
-| Field | Current value | Meaning |
+| Field | Value in this collection | Meaning |
 |:---:|:---:|:---:|
 | `DOWNLOAD_COUNT_ENABLE` | `false` | When `true`, the market fires one fire-and-forget POST per download and tells users this source counts downloads |
 | `DOWNLOAD_COUNT_API` | absent | Counting endpoint, required only when counting is on |
 | `API_NEED_IP` | `false` | Whether the counting request carries the caller's public IP |
 
-Counting is currently off for this collection.
+Counting is off for this collection.
 
 ## How to get a plugin listed
 
-1. Open a pull request against `.github/plugins-sources.json`, one entry per plugin, with `repo`, an optional `ref`, `author` and `plugin`. Fields are documented in [plugins-sources.README.md](.github/plugins-sources.README.md).
-2. After merge, CI clones or copies the source into `temp/`, runs `pnpm install --frozen-lockfile` and `pnpm build`, writes `dist/meta.json` and `dist/plugin.js` into `plugins/<author>/<plugin>/<version>/`, stores author-side detached signatures as `*.author.sig`, stores `dist/author_pub.pem` as `plugins/<author>/author_pub.pem`, then updates that plugin's `versions.json`, that author's `plugin_manifest.json` and the root `datalog.json`.
+1. Open a pull request against `.github/plugins-sources.json`, one entry per plugin, with `repo`, `author` and `plugin`, plus an optional `ref` or `profile`. Fields are documented in [plugins-sources.README.md](.github/plugins-sources.README.md).
+2. After merge, CI imports the entry: it fetches the source, runs `pnpm install --frozen-lockfile` and `pnpm build`, writes the artifacts and author signatures into `plugins/<author>/<plugin>/<version>/`, then updates that plugin's `versions.json`, that author's `plugin_manifest.json` and the root `datalog.json`. The file-by-file mapping is in [plugins-sources.README.md](.github/plugins-sources.README.md).
 3. Add tags by hand. New catalogue entries start with an empty `tag` array and need tags picked from `tags.json`. Undeclared tags are rejected by verification.
 4. Merge and distribute. CI resolves the root certificate, verifies the `eec.pem` chain with `openssl verify`, signs `meta.json` and `plugin.js` of every version with `EEC_SECRET_KEY`, re-verifies `dist/`, commits the changes to `plugins/` and `datalog.json` back to the repository, and publishes `dist/` to Pages.
 
@@ -167,7 +167,7 @@ A failing import step skips that one plugin and logs the reason; the rest still 
 
 ## How the plugin market consumes this collection
 
-The market reads collection metadata and the plugin catalogue first, then fetches version files and signatures by path, and finally anchors `eec.pem` in the root certificate. A single source usually gets several `base_url` entries: a mirrored CDN distribution service, `raw.githubusercontent.com`, and GitHub Pages, with the last two as fallbacks.
+The market reads collection metadata and the plugin catalogue first, then fetches version files and signatures by path, and finally anchors `eec.pem` in the root certificate. The table below is the path contract this repository publishes; the market reads these paths under each `base_url`.
 
 | Step | Path | Purpose |
 |:---:|:---:|:---:|
@@ -180,11 +180,11 @@ The market reads collection metadata and the plugin catalogue first, then fetche
 | 7 | `<base_url>/eec.pem` | Read the end-entity certificate and verify its chain against the root certificate |
 | 8 | `<base_url>/plugins/<author>/author_pub.pem` and `*.author.sig` | Read the author key and signatures when the version carries them |
 
-The market stores the source type, script URL, certificate and signatures, and re-verifies before running a plugin. Any failed check produces a warning only and does not block loading.
+Any failed check produces a warning only and does not block loading, matching the lenient semantics above.
 
 ## Cross-origin access
 
-This collection is hosted on GitHub Pages. Pages serves static assets with `Access-Control-Allow-Origin: *` by default, so all three `base_url` entries above are readable cross-origin, and the host side cannot narrow the allowed origins to a whitelist. That is platform behaviour, not a setting of this repository.
+This collection is hosted on GitHub Pages. Pages serves static assets with `Access-Control-Allow-Origin: *` by default, so the distributed content is readable cross-origin, and the host side cannot narrow the allowed origins to a whitelist. That is platform behaviour, not a setting of this repository.
 
 The specification requires cross-origin access limited to trusted origins, including `https://omdsc-dev.github.io` at the very least. If distribution is moved to another host, configure a CORS whitelist there that allows that origin at minimum.
 
@@ -193,7 +193,7 @@ The specification requires cross-origin access limited to trusted origins, inclu
 ```bash
 pnpm install
 pnpm verify        # read-only consistency check, chain and signatures degrade to warnings without a root certificate
-pnpm build         # writes dist/ once verification passes
+pnpm build         # writes dist/ and build-info.json once verification passes
 pnpm run import    # import plugins from the source manifest
 ```
 
@@ -213,7 +213,7 @@ pnpm run import    # import plugins from the source manifest
 - When a signature fails, the market warns the user and suggests downloading again. It does not run the plugin silently.
 - Being listed is not a certification. A signature proves the content matches its signer, not that the plugin behaviour was audited.
 - Keep private keys in CI secrets and local environment variables, never in the repository. The EEC key lives in `EEC_SECRET_KEY`; the root private key never enters this repository. `.gitignore` already excludes `.env`.
-- Rotating the EEC key pair means replacing `eec.pem` and requesting a new certificate from dsce; CMS signatures made with the old certificate can no longer be verified.
+- Rotating the EEC key pair means replacing `eec.pem` and requesting a new certificate from the DeepSeek-Chat-Enhanced repository; CMS signatures made with the old certificate can no longer be verified.
 - Signatures cover file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere. Author artifacts must be LF too.
 - Minify plugin artifacts. It reduces size and removes meaningless whitespace differences.
 

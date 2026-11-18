@@ -2,7 +2,7 @@
 
 `.github/plugins-sources.json` 是 CI 收录插件时读取的唯一输入。改这个文件就是改收录结果,提交 PR 即可申请收录。
 
-文件内容是数组,每个元素描述一个插件来源。当前为空数组,表示合集尚未收录任何插件。
+文件内容是数组,每个元素描述一个插件来源;数组为空表示合集尚未收录任何插件。
 
 ## 字段
 
@@ -43,7 +43,7 @@
 
 1. 把 `repo` 克隆或复制到 `temp/import/`。
 2. 在该目录执行 `pnpm install --frozen-lockfile` 与 `pnpm build`。
-3. 读取 `dist/meta.json` 取得版本号,把 `dist/meta.json`、`dist/plugin.js` 复制到 `plugins/<author>/<plugin>/<version>/`。
+3. 读取 `dist/meta.json` 取得版本号并确认 `name` 与清单的 `plugin` 一致,把 `dist/meta.json`、`dist/plugin.js` 复制到 `plugins/<author>/<plugin>/<version>/`。
 4. 若 `dist/` 内存在作者侧分离签名,按下面的对应关系一并复制,保留作者签名:
    `dist/plugin.js.sig` 落为 `plugin.js.author.sig`,`dist/meta.json.sig` 落为 `meta.json.author.sig`。
 5. 若 `dist/` 内存在 `author_pub.pem`,复制为 `plugins/<author>/author_pub.pem`。

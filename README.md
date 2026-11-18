@@ -6,7 +6,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 ## 定位与收录范围
 
-本合集面向 dsc 的运行时插件,由 omdsc-dev 维护。本仓库是 omdsc-dev 当前唯一的终端签名方(EEC),持有由 dsce 根证书机构签发的终端签名证书,并用它对收录的插件文件做 CMS 分离签名。
+本合集面向 dsc 的运行时插件,由 omdsc-dev 维护。本仓库是 omdsc-dev 的终端签名方(EEC),持有由 DeepSeek-Chat-Enhanced 仓库的根证书机构签发的终端签名证书,并用它对收录的插件文件做 CMS 分离签名。
 
 收录条件:
 
@@ -26,7 +26,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 | 角色 | 承担者 | 持有物 | 签发对象 |
 |:---:|:---:|:---:|:---:|
-| 根证书机构(CA) | `dsce` 仓库 | 根私钥(离线,不入库)、根证书 | 终端签名证书 `eec.pem` |
+| 根证书机构(CA) | `DeepSeek-Chat-Enhanced` 仓库(组织主线仓库) | 根私钥(离线,不入库)、根证书 | 终端签名证书 `eec.pem` |
 | 终端签名方(EEC) | 本仓库 | EEC 私钥(CI secret `EEC_SECRET_KEY`)、`eec.pem` | 插件文件的 CMS 分离签名 |
 | 独立签名方 | 插件作者,含 omdsc-dev 自身 | 作者密钥对 | 插件文件的裸公钥分离签名 |
 
@@ -35,7 +35,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 信任从根证书开始,一路收到插件文件的字节。
 
 ```text
-dsce 仓库(根 CA,离线)
+DeepSeek-Chat-Enhanced 仓库(根 CA,离线)
   root_ca.crt
       │  签发
       ▼
@@ -55,7 +55,7 @@ dsce 仓库(根 CA,离线)
 | 合集签名 | CMS 分离签名,`openssl cms -sign -binary -outform DER -nocerts -noattr`,产物为 `<文件>.sig`;签名与验签都带 `-binary`,按原始字节处理,不经换行规范化;产物固定为 DER,验签带 `-inform DER` |
 | 作者签名 | 裸公钥分离签名,`openssl pkeyutl -sign -rawin`,作者密钥为 Ed25519 |
 
-根 CA 与 EEC 都必须用 ECDSA P-256。根 CA 用 P-256 是因为证书链校验要在浏览器里做,WebCrypto 对 P-256 支持最广,Ed25519 在目标浏览器下限不可用;EEC 用 P-256 是因为 OpenSSL 的 CMS 实现对 Ed25519 私钥签名报 `provider signature failure`,实测不可用。
+两条曲线都是硬约束,不是偏好:换成 Ed25519 会让证书链校验或 CMS 验签在目标浏览器与 OpenSSL 上直接失败,具体理由见上表。
 
 签名与验签:
 
@@ -77,13 +77,13 @@ openssl cms -verify -binary -inform DER -in meta.json.sig -content meta.json -CA
 
 ### 校验语义
 
-- 本仓库发布前的校验是强校验:`pnpm verify`、`pnpm build`、CI 的每一步遇到错误都以非零退出码中止,不合规的内容不会被分发。
+- 本仓库发布前的校验是强校验:`pnpm build` 与 CI 的每一步遇到错误都以非零退出码中止,不合规的内容不会被分发。`pnpm verify` 默认按骨架模式运行,证书链缺失只警告,见「本地校验」。
 - 分发出去之后的校验是弱校验:插件市场对网页文件签名、插件签名、证书链校验失败**只警告,不阻断,不做兜底**。警告由用户决定是否继续,市场不会替用户静默放行。
 - 签名覆盖文件原始字节。换行、缩进或空白的任何改动都会让校验失败,仓库统一使用 LF。
 
 ### 如何申请 EEC
 
-EEC 证书由 dsce 仓库的根证书机构签发,本仓库不能自签,也不能为其他合集签发。
+EEC 证书由 DeepSeek-Chat-Enhanced 仓库的根证书机构签发,本仓库不能自签,也不能为其他合集签发。
 
 1. 本地生成 EEC 私钥与证书签名请求(CSR),`CN` 取合集名:
 
@@ -92,12 +92,12 @@ EEC 证书由 dsce 仓库的根证书机构签发,本仓库不能自签,也不�
    openssl req -new -key eec_secret.pem -out eec.csr -subj '/O=omdsc-dev/CN=awesome-dsc-plugin'
    ```
 
-2. 把 `eec.csr` 提交给 dsce 仓库(根 CA 维护方),说明用途、有效期与联系人。
+2. 把 `eec.csr` 提交给 DeepSeek-Chat-Enhanced 仓库(根 CA 维护方),说明用途、有效期与联系人。
 3. 拿回签发好的证书,覆盖本仓库根目录的 `eec.pem`。
 4. 把 `eec_secret.pem` 的内容放入 GitHub Actions secret `EEC_SECRET_KEY`,不要提交到仓库。
 5. 合并后 CI 用根证书校验 `eec.pem` 的签发链,链不通、证书过期、`keyUsage` 或 `basicConstraints` 不符都会中止构建。
 
-根证书私钥属于 dsce 仓库的离线环境,本仓库与 CI 都拿不到,也不需要。仓库内现在的 `eec.pem` 是占位证书,不是由根 CA 签发,也不能用于任何真实签名,上线前必须覆盖。
+根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,本仓库与 CI 都拿不到,也不需要。仓库内提交的 `eec.pem` 是占位证书:不是由根 CA 签发,不能用于任何真实签名,正式分发前必须覆盖。
 
 ## 目录结构
 
@@ -114,9 +114,9 @@ awesome-dsc-plugin/
 ├── LICENSE
 ├── README.md
 ├── README.en-US.md
-├── eec.pem                             终端签名证书,由 dsce 根 CA 签发后覆盖
+├── eec.pem                             终端签名证书,由 DeepSeek-Chat-Enhanced 仓库的根 CA 签发后覆盖
 ├── meta.json                           合集元数据,含下载计数开关
-├── datalog.json                        插件目录,以插件名称为唯一键
+├── datalog.json                        插件目录数组,每项一个插件(plugin_name、author、tag)
 ├── tags.json                           预设标签
 ├── package.json
 ├── pnpm-lock.yaml
@@ -142,24 +142,24 @@ awesome-dsc-plugin/
     └── import-plugins.mjs              按来源清单构建并收录插件
 ```
 
-目录命名与必需文件见 [plugins/README.md](plugins/README.md)。
+目录命名与必需文件见 [plugins/README.md](plugins/README.md)。`dist/` 与 `temp/` 是生成目录,不入库:前者由 `pnpm build` 产出,后者是收录时的临时工作区。
 
 ## 合集元数据
 
 根目录 `meta.json` 只声明下载计数的开关:
 
-| 字段 | 当前值 | 说明 |
+| 字段 | 本合集取值 | 说明 |
 |:---:|:---:|:---:|
 | `DOWNLOAD_COUNT_ENABLE` | `false` | 为 `true` 时插件市场每次下载都会向计数接口发送一次不等待回复的 POST 请求,并提示用户该来源启用了计数 |
 | `DOWNLOAD_COUNT_API` | 缺省 | 计数接口地址,仅在启用计数时需要 |
 | `API_NEED_IP` | `false` | 计数请求是否携带请求来源的公网 IP |
 
-本合集当前不启用下载计数。
+本合集不启用下载计数。
 
 ## 收录流程
 
-1. 提交 PR 修改 `.github/plugins-sources.json`,每个插件一项,写明 `repo`、可选的 `ref`、`author` 与 `plugin`。字段见 [plugins-sources.README.md](.github/plugins-sources.README.md)。
-2. 合并后 CI 依次执行: 克隆或复制源码到 `temp/`、`pnpm install --frozen-lockfile`、`pnpm build`、把 `dist/meta.json` 与 `dist/plugin.js` 写入 `plugins/<author>/<plugin>/<version>/`、把作者侧分离签名落为 `*.author.sig`、把 `dist/author_pub.pem` 落为 `plugins/<author>/author_pub.pem`,再更新该插件的 `versions.json`、该作者的 `plugin_manifest.json` 与根目录 `datalog.json`。
+1. 提交 PR 修改 `.github/plugins-sources.json`,每个插件一项,写明 `repo`、`author` 与 `plugin`,可选 `ref` 与 `profile`。字段见 [plugins-sources.README.md](.github/plugins-sources.README.md)。
+2. 合并后 CI 按来源清单收录:取得源码、执行 `pnpm install --frozen-lockfile` 与 `pnpm build`,把产物与作者签名写入 `plugins/<author>/<plugin>/<version>/`,再更新该插件的 `versions.json`、该作者的 `plugin_manifest.json` 与根目录 `datalog.json`。逐文件映射见 [plugins-sources.README.md](.github/plugins-sources.README.md)。
 3. 人工补充标签。新条目在 `datalog.json` 里的 `tag` 初始为空数组,需要从 `tags.json` 的预设标签中挑选后提交。未在 `tags.json` 中声明的标签会被校验拒绝。
 4. 合并并分发。CI 解析根证书、用 `openssl verify` 校验 `eec.pem` 链、用 `EEC_SECRET_KEY` 为每个版本的 `meta.json` 与 `plugin.js` 生成 CMS 签名、对 `dist/` 再校验一遍,然后把 `plugins/` 与 `datalog.json` 的变更提交回仓库,同时把 `dist/` 发布到 Pages。
 
@@ -167,7 +167,7 @@ awesome-dsc-plugin/
 
 ## 插件市场如何消费本合集
 
-市场先读合集元数据与插件目录,再按路径取各版本文件与签名,最后用根证书把 `eec.pem` 收进信任锚。同一个来源通常配置多个 `base_url`,依次是自动同步的 CDN 分发服务、`raw.githubusercontent.com`、GitHub Pages,后两者做兜底。
+市场先读合集元数据与插件目录,再按路径取各版本文件与签名,最后用根证书把 `eec.pem` 收进信任锚。下表是本仓库对外承诺的路径契约,市场按 `base_url` 依次取用。
 
 | 步骤 | 路径 | 用途 |
 |:---:|:---:|:---:|
@@ -180,11 +180,11 @@ awesome-dsc-plugin/
 | 7 | `<base_url>/eec.pem` | 取终端签名证书,用根证书校验证书链 |
 | 8 | `<base_url>/plugins/<author>/author_pub.pem` 与 `*.author.sig` | 有作者签名时,取作者公钥与签名 |
 
-市场把插件来源类型、脚本地址、证书与签名一并存下,每次预运行插件前重新校验。任何一项校验失败只提示警告,不阻断插件加载。
+任何一项校验失败只提示警告,不阻断插件加载,与「校验语义」一节的弱校验一致。
 
 ## 跨域访问
 
-本合集托管在 GitHub Pages。Pages 对静态资源默认返回 `Access-Control-Allow-Origin: *`,因此上表中三个 `base_url` 天然可以被跨域读取,无法在托管侧把来源收窄到白名单。这是托管平台的既定行为,不是本仓库的配置。
+本合集托管在 GitHub Pages。Pages 对静态资源默认返回 `Access-Control-Allow-Origin: *`,因此分发内容天然可以被跨域读取,托管侧无法把来源收窄到白名单。这是托管平台的既定行为,不是本仓库的配置。
 
 规范要求跨域来源仅开放信任的来源,至少包含 `https://omdsc-dev.github.io`。若把分发内容改放到其他托管,需要自行配置 CORS 白名单,至少放行该来源。
 
@@ -193,7 +193,7 @@ awesome-dsc-plugin/
 ```bash
 pnpm install
 pnpm verify        # 只读自洽性校验,无根证书时证书链与签名降级为警告
-pnpm build         # 校验通过后生成 dist/
+pnpm build         # 校验通过后生成 dist/,并写入 build-info.json 作为分发索引
 pnpm run import    # 按来源清单收录插件
 ```
 
@@ -213,7 +213,7 @@ pnpm run import    # 按来源清单收录插件
 - 签名不通过时插件市场会警告用户并建议重新下载,不会静默运行。
 - 收录不等于认证。签名只证明分发内容与签名者一致,不代表插件行为经过审查。
 - 私钥只放 CI secrets 与本地环境变量,不要提交。EEC 私钥放在 `EEC_SECRET_KEY`,根证书私钥永远不进本仓库。`.gitignore` 已排除 `.env`。
-- 更换 EEC 密钥对必须同时换 `eec.pem` 并向 dsce 重新申请签发;旧证书签出的 CMS 签名将无法再验证。
+- 更换 EEC 密钥对必须同时换 `eec.pem` 并向 DeepSeek-Chat-Enhanced 仓库重新申请签发;旧证书签出的 CMS 签名将无法再验证。
 - 签名覆盖文件字节。换行、缩进或空白的任何改动都会让校验失败,仓库统一使用 LF,作者产物也必须是 LF。
 - 插件产物建议行压缩,既减小体积,也避免无意义的空白差异。
 
