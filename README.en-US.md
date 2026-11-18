@@ -40,7 +40,7 @@ dsce repository (root CA, offline)
       │  issues
       ▼
   this repository's eec.pem (end-entity certificate)
-      │  openssl cms -sign -binary
+      │  openssl cms -sign -binary -outform DER
       ▼
   plugins/<author>/<plugin>/<x.y.z>/meta.json.sig
   plugins/<author>/<plugin>/<x.y.z>/plugin.js.sig
@@ -48,14 +48,23 @@ dsce repository (root CA, offline)
 
 | Item | Convention |
 |:---:|:---:|
-| Root CA key | Ed25519, native OpenSSL PEM |
+| Root CA key | ECDSA P-256, native OpenSSL PEM. WebCrypto support for P-256 is the broadest, certificate chain validation happens in the browser, and Ed25519 is unavailable on the target browser floor |
 | Root certificate | X.509 self-signed, `keyUsage=critical,keyCertSign,cRLSign`, `basicConstraints=critical,CA:TRUE,pathlen:0`, valid 3650 days |
-| EEC key | ECDSA P-256 |
+| EEC key | ECDSA P-256. The CMS implementation of OpenSSL reports `provider signature failure` for Ed25519, so Ed25519 cannot be used here |
 | EEC certificate | issued by the root CA, `keyUsage=critical,digitalSignature`, `basicConstraints=critical,CA:FALSE`, valid 365 days |
-| Collection signature | CMS detached signature, `openssl cms -sign -binary -nocerts -noattr` |
+| Collection signature | CMS detached signature, `openssl cms -sign -binary -outform DER -nocerts -noattr`, stored as `<file>.sig`. Both signing and verification pass `-binary`, so raw bytes are signed without line-ending canonicalisation; the artifact is always DER and verification passes `-inform DER` |
 | Author signature | bare-public-key detached signature, `openssl pkeyutl -sign -rawin`, Ed25519 author keys |
 
-The EEC must be ECDSA P-256, not Ed25519: OpenSSL's CMS implementation reports `provider signature failure` when signing with an Ed25519 key, so it is unusable in practice. An Ed25519 root CA issuing the EEC works fine.
+Both the root CA and the EEC must use ECDSA P-256. The root CA uses P-256 because certificate chain validation happens in the browser, WebCrypto support for P-256 is the broadest, and Ed25519 is unavailable on the target browser floor. The EEC uses P-256 because OpenSSL's CMS implementation reports `provider signature failure` when signing with an Ed25519 key, which makes Ed25519 unusable there.
+
+Signing and verification:
+
+```bash
+openssl cms -sign -binary -outform DER -in meta.json -out meta.json.sig -signer eec.pem -inkey eec_secret.pem -nocerts -noattr
+openssl cms -verify -binary -inform DER -in meta.json.sig -content meta.json -CAfile root_ca.crt -certfile eec.pem
+```
+
+`-outform DER` is not optional. The default output is an S/MIME `multipart/signed` wrapper, which browsers cannot parse, and the plugin market verifies signatures in the browser. DER is therefore the cross-repository format: signers always pass `-outform DER` and verifiers always pass `-inform DER`, and either side falling back to the default format breaks verification. Confirm the artifact with `openssl asn1parse -inform DER -in meta.json.sig`.
 
 ### Author self-signatures
 

@@ -40,7 +40,7 @@ dsce 仓库(根 CA,离线)
       │  签发
       ▼
   本仓库 eec.pem(终端签名证书 EEC)
-      │  openssl cms -sign -binary
+      │  openssl cms -sign -binary -outform DER
       ▼
   plugins/<author>/<plugin>/<x.y.z>/meta.json.sig
   plugins/<author>/<plugin>/<x.y.z>/plugin.js.sig
@@ -48,14 +48,23 @@ dsce 仓库(根 CA,离线)
 
 | 项 | 约定 |
 |:---:|:---:|
-| 根 CA 密钥 | Ed25519,OpenSSL 原生 PEM |
+| 根 CA 密钥 | ECDSA P-256,OpenSSL 原生 PEM;浏览器 WebCrypto 对 P-256 支持最广,证书链校验要在浏览器里做,Ed25519 在目标浏览器下限不可用 |
 | 根证书 | X.509 自签名,`keyUsage=critical,keyCertSign,cRLSign`,`basicConstraints=critical,CA:TRUE,pathlen:0`,有效期 3650 天 |
-| EEC 密钥 | ECDSA P-256 |
+| EEC 密钥 | ECDSA P-256;OpenSSL 的 CMS 实现对 Ed25519 报 `provider signature failure`,不可用 |
 | EEC 证书 | 由根 CA 签发,`keyUsage=critical,digitalSignature`,`basicConstraints=critical,CA:FALSE`,有效期 365 天 |
-| 合集签名 | CMS 分离签名,`openssl cms -sign -binary -nocerts -noattr` |
+| 合集签名 | CMS 分离签名,`openssl cms -sign -binary -outform DER -nocerts -noattr`,产物为 `<文件>.sig`;签名与验签都带 `-binary`,按原始字节处理,不经换行规范化;产物固定为 DER,验签带 `-inform DER` |
 | 作者签名 | 裸公钥分离签名,`openssl pkeyutl -sign -rawin`,作者密钥为 Ed25519 |
 
-EEC 必须用 ECDSA P-256,不能用 Ed25519:OpenSSL 的 CMS 实现对 Ed25519 私钥签名报 `provider signature failure`,实测不可用。根 CA 用 Ed25519 签发 EEC 正常。
+根 CA 与 EEC 都必须用 ECDSA P-256。根 CA 用 P-256 是因为证书链校验要在浏览器里做,WebCrypto 对 P-256 支持最广,Ed25519 在目标浏览器下限不可用;EEC 用 P-256 是因为 OpenSSL 的 CMS 实现对 Ed25519 私钥签名报 `provider signature failure`,实测不可用。
+
+签名与验签:
+
+```bash
+openssl cms -sign -binary -outform DER -in meta.json -out meta.json.sig -signer eec.pem -inkey eec_secret.pem -nocerts -noattr
+openssl cms -verify -binary -inform DER -in meta.json.sig -content meta.json -CAfile root_ca.crt -certfile eec.pem
+```
+
+`-outform DER` 不可省略。默认输出是 S/MIME `multipart/signed` 包装,浏览器无法解析,而插件市场要在浏览器里验签,所以 DER 是跨仓库统一格式:签名方固定 `-outform DER`,验签方固定 `-inform DER`,任何一方改用默认格式都会验签失败。产物可用 `openssl asn1parse -inform DER -in meta.json.sig` 确认为 DER。
 
 ### 作者自签名
 
