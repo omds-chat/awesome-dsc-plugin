@@ -1,24 +1,15 @@
 name: build-and-deploy
 
+# 分发模型:来源只有插件作者自己的 Pages 站点,每个 Release 全量重建 pages 包并直接替换,不做版本留存。
+# 本流程不再把分发包提交回仓库,因此只需要读源码的权限。
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'plugins/**'
-      - 'scripts/**'
-      - 'schemas/**'
-      - '.github/**'
-      - 'meta.json'
-      - 'eec.pem'
   release:
     types:
       - published
   workflow_dispatch:
 
-# 需要写权限,因为分发内容(含三层清单与清单签名)会被提交回仓库;Pages 与 OIDC 令牌供发布步骤使用。
 permissions:
-  contents: write
+  contents: read
   pages: write
   id-token: write
 
@@ -26,20 +17,24 @@ concurrency:
   group: pages
   cancel-in-progress: false
 
-# 本仓库是终端签名方(EEC)。私钥只有两个来源:
-#   secrets.EEC_SECRET_KEY  终端签名证书私钥(ECDSA P-256),只在本流程内存中出现;
-#   secrets.ROOT_CA_PEM     根证书 PEM,用于校验证书链与清单签名,不是私钥。
+# 私钥只有两个来源:
+#   secrets.EEC_SECRET_KEY  终端签名证书私钥(ECDSA P-256),只在本流程内存与临时目录中出现;
+#   secrets.ROOT_CA_PEM     根证书 PEM,用于校验证书链与全部 CMS 签名,不是私钥。
 # 根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,绝不出现在本流程。
+# 合集证书的固定位置是 certs/awesome-dsc-plugin-eec.crt;pages 根目录不放 eec.pem。
 env:
   EEC_SECRET_KEY: ${{ secrets.EEC_SECRET_KEY }}
+  EEC_CERT_PEM: ${{ secrets.EEC_CERT_PEM }}
   ROOT_CA_PEM: ${{ secrets.ROOT_CA_PEM }}
   ROOT_CA_URL: ${{ vars.ROOT_CA_URL }}
+  SITE_DIR: ${{ vars.SITE_DIR }}
+  PUBLISHED_BASE_URL: ${{ vars.PUBLISHED_BASE_URL }}
 
 jobs:
   build:
-    name: Build distribution
+    name: Build pages package
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -61,14 +56,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 按 .github/plugins-sources.json 收录插件;清单为空时脚本直接返回 0。
-      # 收录只复制作者侧分离签名(落为 <文件>.author.sig)与作者公钥,不生成合集签名。
-      - name: Import plugins
-        run: node scripts/import-plugins.mjs --manifest .github/plugins-sources.json
-
       # 根证书二选一,优先级从高到低:
       #   1. secrets.ROOT_CA_PEM  根证书 PEM 文本,适合不便公开拉取的场景;
-      #   2. vars.ROOT_CA_URL     根证书下载地址,默认取 online-data 分支的 root_ca.crt。
+      #   2. vars.ROOT_CA_URL     根证书下载地址。
       - name: Resolve root CA
         run: |
           set -euo pipefail
@@ -85,29 +75,69 @@ jobs:
           fi
           echo "ROOT_CA_PATH=$target" >> "$GITHUB_ENV"
 
-      # 强校验: 合集根目录的 eec.pem 必须由该根证书签发,且未过期、
+      # 证书与私钥都从 secrets 注入:私钥只在签名时使用;
+      # 证书默认用 main 分支的 certs/awesome-dsc-plugin-eec.crt,提供 secrets.EEC_CERT_PEM 时以 secret 为准。
+      - name: Install EEC certificate
+        run: |
+          set -euo pipefail
+          target="certs/awesome-dsc-plugin-eec.crt"
+          if [ -n "${EEC_CERT_PEM:-}" ]; then
+            printf '%s\n' "$EEC_CERT_PEM" > "$target"
+            echo "终端签名证书来源: secrets.EEC_CERT_PEM"
+          else
+            echo "终端签名证书来源: $target"
+          fi
+          test -s "$target"
+
+      # 强校验: 合集证书必须由该根证书签发,且未过期、
       # keyUsage 含 digitalSignature、basicConstraints 为 CA:FALSE。
       - name: Verify EEC against root CA
         run: |
           set -euo pipefail
-          openssl verify -CAfile "$ROOT_CA_PATH" eec.pem
-          openssl x509 -in eec.pem -noout -subject -issuer -enddate
-          openssl x509 -in eec.pem -noout -ext keyUsage
-          openssl x509 -in eec.pem -noout -ext basicConstraints
-          openssl x509 -in eec.pem -noout -checkend 0
+          eec="certs/awesome-dsc-plugin-eec.crt"
+          openssl verify -CAfile "$ROOT_CA_PATH" "$eec"
+          openssl x509 -in "$eec" -noout -subject -issuer -enddate
+          openssl x509 -in "$eec" -noout -ext keyUsage
+          openssl x509 -in "$eec" -noout -ext basicConstraints
+          openssl x509 -in "$eec" -noout -checkend 0
 
-      # 用 EEC 私钥为每个版本的 plugin.js 与三层清单(L1 合集根、L2 作者目录、L3 插件目录)
-      # 生成 CMS 分离签名,并生成 dist/。私钥只从 secret 注入,且必须与仓库内的 eec.pem 配对,
-      # 否则步骤直接失败。清单与签名同时写回源码树,供后续步骤提交入库。
-      - name: Build and sign distribution
-        run: node scripts/build-collection.mjs --dir . --root-ca "$ROOT_CA_PATH" --sign --out dist
+      # 源码树自检:catalog 登记之外的结构问题在这里就暴露,不必等到打包之后。
+      - name: Verify repository
+        run: node scripts/verify-collection.mjs --dir . --allow-placeholder-eec
 
-      # 发布前的自检:用根证书独立验签 dist/ 内每一层的 manifest.json.sig,
-      # 不经过 Node 脚本,直接确认 openssl 能验过,避免脚本与 openssl 语义分叉。
-      - name: Verify manifest signatures with root CA
+      # site 构建产物放到 pages 根目录。站点没有自带构建时,直接用 vars.SITE_DIR 指向的静态产物。
+      - name: Build site
         run: |
           set -euo pipefail
-          count=0
+          site_dir="${SITE_DIR:-site/dist}"
+          if [ -f site/package.json ]; then
+            pnpm --dir site install --frozen-lockfile
+            pnpm --dir site build
+          fi
+          test -f "$site_dir/index.html"
+          echo "SITE_OUT=$site_dir" >> "$GITHUB_ENV"
+
+      # 按 catalog 从各插件的 base_url 拉取版本,重新签名 plugin.js,生成三层清单并组装 pages 包。
+      # pages 根目录的 L1 revision 从已发布站点的 manifest.json 读取上一次的值再加一,取不到时从 1 开始。
+      - name: Pull plugins and assemble pages
+        run: |
+          set -euo pipefail
+          published="${PUBLISHED_BASE_URL:-https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/}"
+          node scripts/build-from-catalog.mjs \
+            --catalog catalog \
+            --certs certs \
+            --site "$SITE_OUT" \
+            --out dist/pages \
+            --root-ca "$ROOT_CA_PATH" \
+            --published-base "$published"
+
+      # 不经过 Node 脚本,直接用 openssl 独立验签三层清单与每个 plugin.js,避免脚本与 openssl 语义分叉。
+      - name: Verify manifests and plugin signatures with openssl
+        run: |
+          set -euo pipefail
+          eec="dist/pages/certs/awesome-dsc-plugin-eec.crt"
+          test -f "$eec"
+          manifests=0
           while IFS= read -r manifest; do
             sig="$manifest.sig"
             if [ ! -f "$sig" ]; then
@@ -116,34 +146,67 @@ jobs:
             fi
             openssl cms -verify -binary -md sha512 -inform DER \
               -in "$sig" -content "$manifest" \
-              -CAfile "$ROOT_CA_PATH" -certfile dist/eec.pem > /dev/null
-            echo "清单签名通过: $manifest"
-            count=$((count + 1))
-          done < <(find dist -type f -name manifest.json | sort)
-          if [ "$count" -lt 1 ]; then
-            echo "::error::dist 内没有任何三层清单"
+              -CAfile "$ROOT_CA_PATH" -certfile "$eec" > /dev/null
+            manifests=$((manifests + 1))
+          done < <(find dist/pages -type f -name manifest.json | sort)
+          plugins=0
+          while IFS= read -r plugin; do
+            sig="$plugin.sig"
+            if [ ! -f "$sig" ]; then
+              echo "::error::缺少 plugin.js 签名 $sig"
+              exit 1
+            fi
+            openssl cms -verify -binary -md sha512 -inform DER \
+              -in "$sig" -content "$plugin" \
+              -CAfile "$ROOT_CA_PATH" -certfile "$eec" > /dev/null
+            plugins=$((plugins + 1))
+          done < <(find dist/pages/plugins -type f -name plugin.js | sort)
+          echo "已验签 $manifests 层清单,$plugins 份 plugin.js"
+          if [ "$manifests" -lt 1 ]; then
+            echo "::error::pages 包里没有任何清单"
             exit 1
           fi
-          echo "已验签 $count 层清单"
 
-      # 对即将分发的产物再做一次完整校验: 证书链、三层清单的结构与哈希、
-      # 清单签名、CMS 签名、作者签名与版本目录。
-      - name: Verify distribution
-        run: node scripts/verify-collection.mjs --dir dist --root-ca "$ROOT_CA_PATH"
-
-      # 把构建结果提交回仓库,让开发者本地也能拿到最新的分发内容、三层清单与清单签名。
-      # manifest.json 与 manifest.json.sig 必须入库,否则 revision 会在每次全新 checkout 时退回 1。
-      - name: Commit distribution changes
+      # 结构自检:pages 根目录不放 eec.pem,catalog 与 certs 必须在,plugins 树按作者与插件分层。
+      - name: Check pages layout
         run: |
-          git config user.name 'github-actions'
-          git config user.email 'github-actions@github.com'
-          git add plugins datalog.json meta.json tags.json manifest.json manifest.json.sig
-          if git diff --cached --quiet; then
-            echo 'distribution content unchanged'
-            exit 0
+          set -euo pipefail
+          shopt -s nullglob
+          test -f dist/pages/index.html
+          test -d dist/pages/assets
+          test -f dist/pages/meta.json
+          test -f dist/pages/tags.json
+          test -f dist/pages/datalog.json
+          test -f dist/pages/manifest.json
+          test -f dist/pages/manifest.json.sig
+          test -d dist/pages/catalog
+          test -d dist/pages/certs
+          test -f dist/pages/certs/awesome-dsc-plugin-eec.crt
+          if [ -e dist/pages/eec.pem ]; then
+            echo "::error::pages 根目录不得包含 eec.pem,合集证书只在 certs/awesome-dsc-plugin-eec.crt"
+            exit 1
           fi
-          git commit -m 'chore(dist): refresh plugin distribution content'
-          git push
+          test -f dist/pages/plugins/author_manifest.json
+          for author_manifest in dist/pages/plugins/*/plugin_manifest.json; do
+            author_dir=$(dirname "$author_manifest")
+            test -f "$author_dir/author_pub.pem"
+            test -f "$author_dir/manifest.json"
+            test -f "$author_dir/manifest.json.sig"
+            for versions in "$author_dir"/*/versions.json; do
+              plugin_dir=$(dirname "$versions")
+              test -f "$plugin_dir/manifest.json"
+              test -f "$plugin_dir/manifest.json.sig"
+              for meta in "$plugin_dir"/*/meta.json; do
+                version_dir=$(dirname "$meta")
+                test -f "$version_dir/plugin.js"
+                test -f "$version_dir/plugin.js.sig"
+              done
+            done
+          done
+          echo "pages 结构检查通过"
+
+      - name: Verify pages package
+        run: node scripts/verify-collection.mjs --dir dist/pages --root-ca "$ROOT_CA_PATH"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -151,7 +214,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: dist/pages
 
   deploy:
     name: Deploy Pages

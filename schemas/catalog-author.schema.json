@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omdsc-dev.github.io/awesome-dsc-plugin/schemas/catalog-author.schema.json",
+  "title": "dsc-plugin-collection-catalog-author",
+  "description": "catalog/<作者>/author.json 的结构。只登记作者身份与公钥所在目录,不描述插件本身。",
+  "type": "object",
+  "properties": {
+    "username": {
+      "type": "string",
+      "minLength": 1,
+      "description": "作者用户名,必须与所在目录名 catalog/<作者>/ 逐字符一致。"
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "description": "作者主页地址,写完整的绝对地址,用于在插件市场里链接回作者。"
+    }
+  },
+  "required": [
+    "username",
+    "profile"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "username": "omdsc-dev",
+      "profile": "https://github.com/omdsc-dev"
+    }
+  ]
+}

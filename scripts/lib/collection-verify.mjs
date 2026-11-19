@@ -16,7 +16,6 @@ import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { basename, join, resolve } from 'node:path'
 import {
   AUTHOR_PUB_FILE,
-  EEC_CERT_FILE,
   MANIFEST_FILE,
   ROOT_CA_FILE,
   VERSION_AUTHOR_SIGNED_FILES,
@@ -26,13 +25,18 @@ import {
   describeCertificate,
   describePublicKey,
   hasDigitalSignature,
+  resolveEecCertPath,
   verifyChain,
   verifyFileAuthor,
   verifyFileCms,
 } from '../pki.mjs'
 
-/** 合集根目录必需的文件。tags.json 可选,存在时才要求被 L1 清单覆盖 */
-export const ROOT_REQUIRED_FILES = [EEC_CERT_FILE, 'meta.json', 'datalog.json']
+/**
+ * 合集根目录必需的文件。tags.json 可选,存在时才要求被 L1 清单覆盖。
+ * 终端签名证书不在合集根,按 resolveEecCertPath 解析(现行布局是 certs/awesome-dsc-plugin-eec.crt),
+ * 因此单独校验,不列入本数组。
+ */
+export const ROOT_REQUIRED_FILES = ['meta.json', 'datalog.json']
 /** 版本目录内必需的文件。meta.json.sig 已取消,产物本体只由 plugin.js.sig 签名 */
 export const VERSION_REQUIRED_FILES = ['meta.json', 'plugin.js', 'plugin.js.sig']
 /** 作者目录内的公钥文件名 */
@@ -269,7 +273,7 @@ function verifyLayerManifest(context) {
   if (!isFile(sigPath)) {
     report[missingLevel]('MANIFEST_SIGNATURE_MISSING', layerLabel + ' 缺少清单签名 ' + MANIFEST_FILE + MANIFEST_SIGNATURE_SUFFIX, sigRel)
   } else if (!cmsReady) {
-    report.warn('SIGN_UNVERIFIABLE', sigRel + ' 无法校验,缺少根证书或 ' + EEC_CERT_FILE, sigRel)
+    report.warn('SIGN_UNVERIFIABLE', sigRel + ' 无法校验,缺少根证书或终端签名证书', sigRel)
   } else {
     const result = verifyFileCms(manifestPath, sigPath, rootCaPath, eecPath)
     if (!result.ok) {
@@ -360,7 +364,8 @@ export function resolveRootCaPath(options = {}, env = process.env) {
  * @param {string} collectionDir 合集根目录
  * @param {object} [options] 选项
  * @param {string|null} [options.rootCaPath] 根证书路径,缺失时无法校验证书链与 CMS 签名
- * @param {boolean} [options.allowPlaceholderEec] 骨架模式:根证书缺失或 eec.pem 未由根 CA 签发时降级为警告
+ * @param {string} [options.eecCert] 终端签名证书路径,默认 certs/awesome-dsc-plugin-eec.crt
+ * @param {boolean} [options.allowPlaceholderEec] 骨架模式:根证书缺失或 certs/awesome-dsc-plugin-eec.crt 未由根 CA 签发时降级为警告
  * @param {string} [options.collectionName] 合集名称,默认取目录名
  * @returns {{ok: boolean, root: string, collectionName: string, errorCount: number, warningCount: number, problems: Array<object>, stats: object}}
  */
@@ -381,7 +386,9 @@ export function verifyCollection(collectionDir, options = {}) {
   const allowMissingManifest = options.allowMissingManifest === true || skeleton
   const collectionName = options.collectionName || basename(root)
   const rootCaPath = options.rootCaPath ? resolve(options.rootCaPath) : null
-  const eecPath = join(root, EEC_CERT_FILE)
+  const eec = resolveEecCertPath(root, options)
+  const eecPath = eec.path
+  const eecRel = eec.relative
 
   const finish = () => {
     const errorCount = problems.filter((item) => item.level === 'error').length
@@ -424,48 +431,48 @@ export function verifyCollection(collectionDir, options = {}) {
     report.error('META_FIELD_INVALID', '根目录 meta.json 的顶层必须是对象', 'meta.json')
   }
 
-  // 三、终端签名证书与证书链
+  // 三、终端签名证书与证书链。证书放在 certs 目录,不在合集根
   const chainLevel = skeleton ? 'warn' : 'error'
   let eecParsed = false
   if (!isFile(eecPath)) {
-    report.error('EEC_MISSING', '根目录缺少终端签名证书 ' + EEC_CERT_FILE, EEC_CERT_FILE)
+    report.error('EEC_MISSING', '合集缺少终端签名证书 ' + eecRel, eecRel)
   } else {
     let cert = null
     try {
       cert = describeCertificate(eecPath)
       eecParsed = true
     } catch (error) {
-      report.error('EEC_INVALID', EEC_CERT_FILE + ' 不是可解析的 X.509 证书:' + error.message, EEC_CERT_FILE)
+      report.error('EEC_INVALID', eecRel + ' 不是可解析的 X.509 证书:' + error.message, eecRel)
     }
     if (cert) {
       if (!rootCaPath) {
         report[chainLevel](
           'ROOT_CA_MISSING',
-          '未提供根证书,无法校验 ' + EEC_CERT_FILE + ' 的签发链;请用 --root-ca 或环境变量 ROOT_CA_PATH 提供',
-          EEC_CERT_FILE,
+          '未提供根证书,无法校验 ' + eecRel + ' 的签发链;请用 --root-ca 或环境变量 ROOT_CA_PATH 提供',
+          eecRel,
         )
       } else if (!isFile(rootCaPath)) {
         report[chainLevel]('ROOT_CA_MISSING', '根证书文件不存在:' + rootCaPath, null)
       } else {
         const chain = verifyChain(eecPath, rootCaPath)
         if (!chain.ok) {
-          report[chainLevel]('EEC_NOT_CHAINED', EEC_CERT_FILE + ' 不是由给定根证书签发:' + chain.reason, EEC_CERT_FILE)
+          report[chainLevel]('EEC_NOT_CHAINED', eecRel + ' 不是由给定根证书签发:' + chain.reason, eecRel)
         }
       }
       if (!cert.validNow) {
-        report.error('EEC_EXPIRED', EEC_CERT_FILE + ' 已过期,notAfter=' + String(cert.notAfter), EEC_CERT_FILE)
+        report.error('EEC_EXPIRED', eecRel + ' 已过期,notAfter=' + String(cert.notAfter), eecRel)
       }
       if (!hasDigitalSignature(cert.keyUsage)) {
         report.error(
           'EEC_KEY_USAGE',
-          EEC_CERT_FILE + ' 的 keyUsage 不含 digitalSignature,实际为 [' + cert.keyUsage.join(', ') + ']',
-          EEC_CERT_FILE,
+          eecRel + ' 的 keyUsage 不含 digitalSignature,实际为 [' + cert.keyUsage.join(', ') + ']',
+          eecRel,
         )
       }
       if (cert.isCa === true) {
-        report.error('EEC_IS_CA', EEC_CERT_FILE + ' 是 CA 证书,要求 basicConstraints 为 CA:FALSE', EEC_CERT_FILE)
+        report.error('EEC_IS_CA', eecRel + ' 是 CA 证书,要求 basicConstraints 为 CA:FALSE', eecRel)
       } else if (cert.isCa === null) {
-        report.warn('EEC_BASIC_CONSTRAINTS', EEC_CERT_FILE + ' 缺少 basicConstraints 扩展,建议显式声明 CA:FALSE', EEC_CERT_FILE)
+        report.warn('EEC_BASIC_CONSTRAINTS', eecRel + ' 缺少 basicConstraints 扩展,建议显式声明 CA:FALSE', eecRel)
       }
     }
   }
@@ -729,7 +736,7 @@ function inspectVersionSignatures({ versionDir, versionRel, report, rootCaPath, 
     if (!isFile(sigPath)) {
       // 缺签名文件已由 VERSION_REQUIRED_FILES 报错,这里不重复
     } else if (!cmsReady) {
-      report.warn('SIGN_UNVERIFIABLE', rel + '.sig 无法校验,缺少根证书或 ' + EEC_CERT_FILE, rel + '.sig')
+      report.warn('SIGN_UNVERIFIABLE', rel + '.sig 无法校验,缺少根证书或终端签名证书', rel + '.sig')
     } else {
       const result = verifyFileCms(filePath, sigPath, rootCaPath, eecPath)
       if (!result.ok) {

@@ -226,8 +226,18 @@ awesome-dsc-plugin/
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
-├── schemas/
-│   └── manifest.schema.json            JSON Schema of the three manifests
+├── catalog/                            registration: author identity, public key and plugin site
+│   ├── README.md                       author guide
+│   └── <author>/                       one directory per author, named after username
+│       ├── author.json                 author identity
+│       ├── author_pub.pem              author public key, Ed25519, OpenSSL PEM
+│       └── <plugin>/                   one directory per plugin
+│           └── plugin.json             plugin registration, holds base_url
+├── schemas/                            every JSON Schema of this repository
+│   ├── README.md                       schema index
+│   ├── manifest.schema.json            JSON Schema of the three manifests
+│   ├── catalog-author.schema.json      JSON Schema of author.json
+│   └── catalog-plugin.schema.json      JSON Schema of plugin.json
 ├── plugins/
 │   ├── author_manifest.json            registered authors
 │   ├── manifest.json                   L2 manifests are generated per author directory
@@ -275,6 +285,24 @@ This collection does not enable download counting.
 4. Merge and distribute. CI resolves the root certificate, checks the `eec.pem` chain with `openssl verify`, signs every version's `plugin.js` and generates the three manifests plus their signatures with `EEC_SECRET_KEY`, verifies `dist/` again and self-checks the three manifest signatures against the root certificate, then commits the changes to `plugins/`, `datalog.json` and every `manifest.json` and `manifest.json.sig` back to the repository while publishing `dist/` to Pages.
 
 A failure during import only skips that plugin and logs the reason; the remaining plugins are still processed. A failure during signing or verification aborts the whole build.
+
+## How to submit a plugin
+
+Registration lives in `catalog/`, with one directory per author and one `plugin.json` per plugin. Artifacts never enter this repository, so a PR that adds the three files below is the whole submission; no script or `.github/` change is needed:
+
+```text
+catalog/<author>/
+├── author.json        author identity: username and profile
+├── author_pub.pem     author public key, OpenSSL PEM, Ed25519
+└── <plugin>/
+    └── plugin.json    plugin registration: name, description, license, repo_link, base_url
+```
+
+- `base_url` points at the plugin's own publishing site; CI fetches every version and artifact of the plugin from that address and re-signs them with the collection EEC before writing them into the pages bundle. Releases carry no assets and no assets are fetched from a release.
+- Versions are not registered in `catalog/`; CI discovers them from `base_url`, and `catalog/<author>/<plugin>/<version>/` is only a placeholder level.
+- To withdraw, delete your `catalog/<author>/` directory and open a PR.
+
+Fields, the public key command, what happens after inclusion and the structural schemas are documented in [catalog/README.md](catalog/README.md).
 
 ## How the plugin market consumes this collection
 

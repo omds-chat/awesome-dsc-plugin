@@ -1,0 +1,52 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omdsc-dev.github.io/awesome-dsc-plugin/schemas/catalog-plugin.schema.json",
+  "title": "dsc-plugin-collection-catalog-plugin",
+  "description": "catalog/<作者>/<插件>/plugin.json 的结构。只登记插件身份与发布站点,版本不在这里登记,由 CI 从 base_url 自动发现。",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "插件名,建议符合 dsc-xxx 或 @scope/dsc-xxx,并与版本目录里 meta.json 的 name 一致。"
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1,
+      "description": "一句话说明插件做什么,用于插件市场列表展示。"
+    },
+    "license": {
+      "type": "string",
+      "minLength": 1,
+      "description": "插件许可证,建议写 SPDX 标识,例如 Apache-2.0。"
+    },
+    "repo_link": {
+      "type": "string",
+      "minLength": 1,
+      "description": "插件源码仓库地址,写完整的 http 或 https 绝对地址。"
+    },
+    "base_url": {
+      "type": "string",
+      "minLength": 1,
+      "description": "插件自己发布的站点基址,http 或 https 开头的绝对地址,必须以斜杠结尾。CI 只从这个地址取版本与产物,不从 Release 取任何资产。",
+      "pattern": "^https?://[^/\\s?#]+(?:/[^?\\s#]*)?/$"
+    }
+  },
+  "required": [
+    "name",
+    "description",
+    "license",
+    "repo_link",
+    "base_url"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "name": "dsc-plugin-gallery",
+      "description": "把对话里的图片整理成画廊视图。",
+      "license": "Apache-2.0",
+      "repo_link": "https://github.com/omdsc-dev/dsc-plugin-gallery",
+      "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/"
+    }
+  ]
+}

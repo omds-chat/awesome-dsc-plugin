@@ -17,14 +17,18 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 
 /** 根证书文件名 */
 export const ROOT_CA_FILE = 'root_ca.crt'
 /** 根 CA 私钥文件名,只在签名环境使用,不入库 */
 export const ROOT_CA_KEY_FILE = 'root_secret.pem'
-/** 合集根目录的终端签名证书文件名 */
+/** 终端签名证书的历史文件名,只在兼容旧布局时使用 */
 export const EEC_CERT_FILE = 'eec.pem'
+/** 合集终端签名证书的文件名,固定放在 certs 目录内 */
+export const EEC_CERT_BASENAME = 'awesome-dsc-plugin-eec.crt'
+/** 合集终端签名证书相对仓库根的路径。Pages 根目录不放证书,证书只在 certs 里 */
+export const EEC_CERT_RELATIVE = 'certs/' + EEC_CERT_BASENAME
 /** EEC 私钥文件名,只从 CI secret 读取 */
 export const EEC_KEY_FILE = 'eec_secret.pem'
 /** EEC 证书签名请求文件名 */
@@ -506,6 +510,41 @@ export function certMatchesKey(certPath, keyPath) {
   const keyPublic = run(['pkey', '-in', keyPath, '-pubout']).stdout
   const normalize = (text) => text.replace(/\r\n/g, '\n').trim()
   return normalize(certPublic) === normalize(keyPublic)
+}
+
+
+/** 把绝对路径转成相对合集根的正斜杠相对路径,供报错与清单展示使用。 */
+function toPosixRelative(rootDir, target) {
+  return relative(rootDir, target).split(sep).join('/')
+}
+
+/**
+ * 解析合集终端签名证书的位置。优先级从高到低:
+ *   1. 显式参数 eecCert;
+ *   2. 环境变量 EEC_CERT_PATH;
+ *   3. <合集根>/certs/awesome-dsc-plugin-eec.crt(现行布局);
+ *   4. <合集根>/eec.pem(旧布局兼容)。
+ * 前两项由调用方显式指定,不做存在性降级;后两项按存在性挑选,都不存在时返回 certs 下的路径,
+ * 让调用方按「缺证书」报错。
+ * @param {string} root 合集根目录
+ * @param {{eecCert?: string}} [options] 选项
+ * @param {Record<string, string|undefined>} [env] 环境变量表
+ * @returns {{path: string, relative: string}}
+ */
+export function resolveEecCertPath(root, options = {}, env = process.env) {
+  const rootDir = resolve(root)
+  if (typeof options.eecCert === 'string' && options.eecCert.trim().length > 0) {
+    const explicit = resolve(options.eecCert.trim())
+    return { path: explicit, relative: toPosixRelative(rootDir, explicit) }
+  }
+  if (typeof env.EEC_CERT_PATH === 'string' && env.EEC_CERT_PATH.trim().length > 0) {
+    const fromEnv = resolve(env.EEC_CERT_PATH.trim())
+    return { path: fromEnv, relative: toPosixRelative(rootDir, fromEnv) }
+  }
+  const certsPath = join(rootDir, EEC_CERT_RELATIVE)
+  const legacyPath = join(rootDir, EEC_CERT_FILE)
+  const picked = existsSync(certsPath) ? certsPath : existsSync(legacyPath) ? legacyPath : certsPath
+  return { path: picked, relative: toPosixRelative(rootDir, picked) }
 }
 
 /** 读取 UTF-8 文本文件。 */

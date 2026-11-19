@@ -226,8 +226,18 @@ awesome-dsc-plugin/
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
-├── schemas/
-│   └── manifest.schema.json            三层清单的 JSON Schema
+├── catalog/                            收录登记:作者身份、公钥与插件站点
+│   ├── README.md                       作者登记说明
+│   └── <作者>/                           一位作者一个目录,目录名即 username
+│       ├── author.json                 作者身份
+│       ├── author_pub.pem              作者公钥,Ed25519,OpenSSL PEM
+│       └── <插件>/                       一个插件一个目录
+│           └── plugin.json             插件登记,含 base_url
+├── schemas/                            本仓库全部 JSON Schema
+│   ├── README.md                       schema 索引
+│   ├── manifest.schema.json            三层清单的 JSON Schema
+│   ├── catalog-author.schema.json      author.json 的 JSON Schema
+│   └── catalog-plugin.schema.json      plugin.json 的 JSON Schema
 ├── plugins/
 │   ├── author_manifest.json            登记的作者清单
 │   ├── manifest.json                   L2 清单由脚本按作者目录生成
@@ -275,6 +285,24 @@ awesome-dsc-plugin/
 4. 合并并分发。CI 解析根证书、用 `openssl verify` 校验 `eec.pem` 链、用 `EEC_SECRET_KEY` 为每个版本的 `plugin.js` 签名并生成三层清单与清单签名、对 `dist/` 再校验一遍并用根证书自检三层清单签名,然后把 `plugins/`、`datalog.json` 与各层 `manifest.json`、`manifest.json.sig` 的变更提交回仓库,同时把 `dist/` 发布到 Pages。
 
 收录环节任何一步失败只跳过该插件并在日志里写明原因,其余插件照常处理。签名与校验环节失败则整个构建中止。
+
+## 如何收录插件
+
+收录登记在 `catalog/` 目录,一位作者一个目录、一个插件一份 `plugin.json`,插件产物不进本仓库。提交一个新增下面这三个文件的 PR 就完成登记,不需要改脚本或 `.github/`:
+
+```text
+catalog/<作者>/
+├── author.json        作者身份:username 与 profile
+├── author_pub.pem     作者公钥,OpenSSL PEM,Ed25519
+└── <插件>/
+    └── plugin.json    插件登记:name、description、license、repo_link、base_url
+```
+
+- `base_url` 指向插件自己发布的站点基址,CI 到该地址拉取该插件的全部版本与产物,用合集 EEC 重新签名后写进 pages 包;Release 不放任何资产,也不从 Release 取。
+- 版本不在 `catalog/` 登记,由 CI 从 `base_url` 自动发现,`catalog/<作者>/<插件>/<版本>/` 只是占位层级。
+- 下架时删除自己的 `catalog/<作者>/` 目录并提交 PR。
+
+字段含义、公钥生成命令、收录后的处理与结构 schema 见 [catalog/README.md](catalog/README.md)。
 
 ## 插件市场如何消费本合集
 
