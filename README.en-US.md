@@ -1,6 +1,6 @@
 # awesome-dsc-plugin
 
-The dsc community plugin collection. Plugins are indexed, signed and distributed here under distribution specification v2, and the plugin market reads the three hash-manifest layers, the end-entity signing certificate and the signatures to obtain them.
+The dsc community plugin collection. Plugins are indexed, signed and distributed here under distribution specification v2, and the plugin market reads the three hash-manifest layers, the collection certificate and the signatures inside the pages bundle to obtain them.
 
 [简体中文](README.md)
 
@@ -20,27 +20,31 @@ Inclusion is not endorsement. This collection only guarantees that distributed c
 
 ## Distribution layout
 
-Distribution content is a three-layer hash-manifest structure. Each layer has one `manifest.json` and one `manifest.json.sig`; a manifest records the SHA-512 of every file in its layer and the signature is produced by the end-entity signing certificate (EEC) issued by the root CA. Layers do not reference each other, so each one can be published, verified and re-signed on its own.
+The collection is published as a pages bundle: on every Release CI pulls the plugins registered in `catalog/` from each author's own `base_url`, re-signs them with the collection EEC, rebuilds the whole bundle and replaces it, keeping no versions. Plugins are organised under `plugins/` in three levels (author, plugin, version), and each level carries one `manifest.json` and one `manifest.json.sig`: a manifest records the SHA-512 of every file in its layer and the signature is produced by the end-entity signing certificate (EEC) issued by the root CA. Layers do not reference each other, so each one can be published, verified and re-signed on its own.
 
 ```text
-<collection>/
-├── eec.pem                    # end-entity signing certificate, shipped with Pages, covered by no manifest
-├── meta.json                  # L1
-├── datalog.json               # L1
-├── tags.json                  # L1
-├── manifest.json              # L1 manifest
-├── manifest.json.sig          # L1 manifest signature
+<collection>/                          # pages bundle root, rebuilt from scratch on every Release
+├── index.html                         # site build output
+├── assets/                            # site build output: page scripts and styles
+├── meta.json                          # L1, collection metadata with the download counting switch
+├── tags.json                          # L1, preset tags
+├── datalog.json                       # L1, plugin catalog generated from catalog/
+├── manifest.json                      # L1 manifest
+├── manifest.json.sig                  # L1 manifest signature
+├── catalog/                           # registrations, copied verbatim, covered by no manifest
+├── certs/                             # trust material, copied verbatim, covered by no manifest
+│   └── awesome-dsc-plugin-eec.crt     # collection end-entity signing certificate, issued by the root CA
 └── plugins/
-    ├── author_manifest.json   # L1
+    ├── author_manifest.json           # L1
     └── <author>/
-        ├── author_pub.pem         # L2, author public key, OpenSSL PEM, Ed25519
-        ├── plugin_manifest.json   # L2
-        ├── manifest.json          # L2 manifest
-        ├── manifest.json.sig      # L2 manifest signature
+        ├── author_pub.pem             # L2, author public key, OpenSSL PEM, Ed25519
+        ├── plugin_manifest.json       # L2
+        ├── manifest.json              # L2 manifest
+        ├── manifest.json.sig          # L2 manifest signature
         └── <plugin>/
-            ├── versions.json      # L3
-            ├── manifest.json      # L3 manifest
-            ├── manifest.json.sig  # L3 manifest signature
+            ├── versions.json          # L3
+            ├── manifest.json          # L3 manifest
+            ├── manifest.json.sig      # L3 manifest signature
             └── <x.y.z>/
                 ├── meta.json          # L3
                 ├── plugin.js
@@ -48,11 +52,15 @@ Distribution content is a three-layer hash-manifest structure. Each layer has on
                 └── plugin.js.author.sig # author bare public key signature, optional
 ```
 
+There is no `eec.pem` in the root any more: the collection certificate lives at `certs/awesome-dsc-plugin-eec.crt`, ships with the pages bundle and is covered by no manifest; the root certificate is not distribution content either.
+
 | Layer | Location | Covered files (relative to the layer directory) |
 |:---:|:---:|:---:|
-| L1 | collection root | `meta.json`, `datalog.json`, `plugins/author_manifest.json` required, `tags.json` when present |
+| L1 | pages bundle root | `meta.json`, `datalog.json`, `tags.json`, `plugins/author_manifest.json`, with `tags.json` covered when present |
 | L2 | `plugins/<author>/` | `author_pub.pem`, `plugin_manifest.json`, only when the file exists |
 | L3 | `plugins/<author>/<plugin>/` | `versions.json` and every version directory's `meta.json` |
+
+`catalog/` and `certs/` are covered by no manifest: the first is registration data, the second is trust material.
 
 Manifest format, with the JSON Schema in `schemas/manifest.schema.json`:
 
@@ -68,25 +76,29 @@ Manifest format, with the JSON Schema in `schemas/manifest.schema.json`:
 
 - `path` is relative to the directory holding the manifest, uses forward slashes, may not be absolute, may not contain a `.` or `..` segment, may not point at the manifest itself, and may not repeat.
 - The hash is SHA-512 in lowercase hex, always 128 characters.
-- `revision` is a positive integer per layer: it increments when the layer's file set or contents change, keeps its value when nothing changed, and starts at 1 without a previous manifest.
+- `revision` is a positive integer per layer: it increments when the layer's file set or contents change and keeps its value when nothing changed; the bundle is rebuilt from scratch on every Release, so the previous value is read per layer from the published site's `manifest.json` at the same path, starting at 1 when it cannot be read.
 - L3 does not cover `plugin.js` or `plugin.js.sig`: the artifact itself is signed per version by `plugin.js.sig` and the manifest describes metadata only.
 - `tags.json` is optional: when it exists it must be covered by the L1 manifest, and when it does not exist it is neither required nor listed.
 - `meta.json.sig` and `meta.json.author.sig` are gone: the only collection signature inside a version directory is `plugin.js.sig`, and `plugin.js.author.sig` stays optional. `meta.json` is covered by the L3 manifest and bound by the collection EEC, while the author public key itself is covered by L2. The `dsc-plugin-template` repository still emits `meta.json.author.sig` and has to be synced.
 
 The three layers are deliberately not folded together: L1 does not reference L2 and L2 does not reference L3, so each layer can be published, verified and re-signed on its own. The trade-off gives up "one check yields a digest of the whole tree" in exchange for per-plugin incremental updates: changing one plugin only increments the L3 `revision`, leaves L2 and L1 untouched, and clients refetch just that layer. Folding the layers into a single root manifest would make every plugin release rewrite the root manifest and force every client to refetch the whole digest.
 
-All three `manifest.json` and `manifest.json.sig` files must be committed with the source. A `revision` is read back from the previous manifest of the same layer, so leaving them out of version control resets every layer to 1 on a fresh checkout and breaks revision continuity across CI runs; the manifests and their signatures are themselves distribution content, and `pnpm build` can regenerate them but cannot recover the historical `revision`.
+The pages bundle is a build artifact and is never committed back: every Release rebuilds it and replaces it wholesale, so the repository keeps no history of `datalog.json`, the plugin data under `plugins/`, or `manifest.json` and `manifest.json.sig`. Each layer's `revision` therefore cannot be carried over from the source tree; it is read per layer from the published site's `manifest.json`, kept when the file set and hashes are unchanged, and incremented otherwise.
 
 ## Required files
 
+The required and optional files of each location inside the pages bundle:
+
 | Location | Required | Optional |
 |:---:|:---:|:---:|
-| collection root | `eec.pem`, `meta.json`, `datalog.json`, `plugins/author_manifest.json`, `manifest.json`, `manifest.json.sig` | `tags.json` |
+| pages bundle root | `meta.json`, `datalog.json`, `plugins/author_manifest.json`, `manifest.json`, `manifest.json.sig` | `tags.json` |
+| `certs/` | `awesome-dsc-plugin-eec.crt`, covered by no manifest | `awesome-dsc-plugin-secret.pub`, likewise covered by none |
+| `catalog/` | every author's `author.json`, `author_pub.pem` and `<plugin>/plugin.json`, copied verbatim and covered by no manifest | none |
 | `plugins/<author>/` | `plugin_manifest.json`, `manifest.json`, `manifest.json.sig` | `author_pub.pem` |
 | `plugins/<author>/<plugin>/` | `versions.json`, `manifest.json`, `manifest.json.sig` | none |
 | `plugins/<author>/<plugin>/<x.y.z>/` | `meta.json`, `plugin.js`, `plugin.js.sig` | `plugin.js.author.sig` |
 
-Directory naming, the `versions.json` shape and the `meta.json` fields are documented in [plugins/README.md](plugins/README.md). `eec.pem` only proves who signed; it is covered by no manifest. The root certificate is not part of distribution content: it is distributed through the online-data branch and pinned by fingerprint inside the web client.
+Directory naming, the `versions.json` shape and the `meta.json` fields are documented in [plugins/README.md](plugins/README.md). The collection certificate lives only at `certs/awesome-dsc-plugin-eec.crt` and the root no longer carries an `eec.pem`; it only proves who signed and is covered by no manifest. The root certificate is not part of distribution content: it is distributed through the online-data branch and pinned by fingerprint inside the web client.
 
 ## Signing and verification
 
@@ -96,8 +108,8 @@ The scheme is built on OpenSSL PKI, with three roles each holding one key, so wh
 
 | Role | Holder | Material | Signs |
 |:---:|:---:|:---:|:---:|
-| Root CA | `DeepSeek-Chat-Enhanced` repository (the organisation mainline) | root private key (offline, never committed), root certificate | end-entity signing certificates `eec.pem` |
-| End-entity signer (EEC) | this repository | EEC private key (CI secret `EEC_SECRET_KEY`), `eec.pem` | detached CMS signatures for the three manifests and every version's `plugin.js` |
+| Root CA | `DeepSeek-Chat-Enhanced` repository (the organisation mainline) | root private key (offline, never committed), root certificate | end-entity signing certificate `certs/awesome-dsc-plugin-eec.crt` |
+| End-entity signer (EEC) | this repository | EEC private key (CI secret `EEC_SECRET_KEY`), `certs/awesome-dsc-plugin-eec.crt` | detached CMS signatures for the three manifests and every version's `plugin.js` |
 | Independent signer | plugin authors, omdsc-dev included | author key pair | bare public key signature over `plugin.js` |
 
 ### Certificate chain
@@ -109,7 +121,7 @@ DeepSeek-Chat-Enhanced repository (root CA, offline)
   root_ca.crt
       │  issues
       ▼
-  this repository's eec.pem (end-entity signing certificate)
+  this repository's certs/awesome-dsc-plugin-eec.crt (end-entity signing certificate)
       │  openssl cms -sign -binary -md sha512 -outform DER -nocerts -noattr
       ▼
   manifest.json.sig          L1 manifest signature
@@ -144,8 +156,8 @@ Both curves are hard constraints rather than preferences: switching to Ed25519 b
 Collection signing and verification. The three manifests and `plugin.js` share one command and differ only in the file name:
 
 ```bash
-openssl cms -sign -binary -md sha512 -outform DER -in manifest.json -out manifest.json.sig -signer eec.pem -inkey eec_secret.pem -nocerts -noattr
-openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -content manifest.json -CAfile root_ca.crt -certfile eec.pem
+openssl cms -sign -binary -md sha512 -outform DER -in manifest.json -out manifest.json.sig -signer certs/awesome-dsc-plugin-eec.crt -inkey eec_secret.pem -nocerts -noattr
+openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -content manifest.json -CAfile root_ca.crt -certfile certs/awesome-dsc-plugin-eec.crt
 ```
 
 `-md sha512` pins the digest algorithm instead of relying on the OpenSSL default, and `-outform DER` is not optional. The default output is an S/MIME `multipart/signed` wrapper, which browsers cannot parse, and the plugin market verifies signatures in the browser. DER is therefore the cross-repository format: signers always pass `-outform DER` and verifiers always pass `-inform DER`, and either side falling back to the default format breaks verification. Confirm the artifact with `openssl asn1parse -inform DER -in manifest.json.sig`.
@@ -168,21 +180,21 @@ Author signatures are optional. Without one, a version carries only this reposit
 
 | # | Rule |
 |:---:|:---:|
-| 1 | `eec.pem` exists in the root, chains to the given root certificate (`--root-ca` or `ROOT_CA_PATH`), is not expired, has `digitalSignature` in `keyUsage` and is not a CA |
+| 1 | The collection certificate `certs/awesome-dsc-plugin-eec.crt` exists (the root no longer carries an `eec.pem`), chains to the given root certificate (`--root-ca` or `ROOT_CA_PATH`), is not expired, has `digitalSignature` in `keyUsage` and is not a CA |
 | 2 | Every plugin in `datalog.json` appears in `plugins/<author>/plugin_manifest.json` and its plugin directory exists |
 | 3 | Every plugin directory has `versions.json` and `latest` is present in `versions` |
-| 4 | Every version directory has `meta.json`, `plugin.js` and `plugin.js.sig`, verified with `openssl cms -verify -binary -md sha512 -inform DER -CAfile <root> -certfile eec.pem`; a failure is an error |
+| 4 | Every version directory has `meta.json`, `plugin.js` and `plugin.js.sig`, verified with `openssl cms -verify -binary -md sha512 -inform DER -CAfile <root> -certfile certs/awesome-dsc-plugin-eec.crt`; a failure is an error |
 | 5 | When `plugin.js.author.sig` exists in a version directory, `plugins/<author>/author_pub.pem` must exist and the signature must verify with `openssl pkeyutl -verify`; a failure is an error. Other `*.author.sig` files are not checked |
 | 6 | When `tags.json` exists, every `tag` in `datalog.json` comes from it |
 | 7 | All three manifests exist and are structurally valid: `schemaVersion` is 1, `revision` is a positive integer, `files` is a non-empty array, and each entry holds only `path` and `sha512` |
 | 8 | Every `path` is valid: forward slashes, relative, no `..`, not the manifest itself, no duplicates |
 | 9 | Coverage matches the layer exactly: every required file is listed and nothing extra is, so L3 never lists `plugin.js` or `plugin.js.sig` |
 | 10 | Every recorded SHA-512 matches the file contents, and a mismatch names the layer and the file |
-| 11 | Every `manifest.json.sig` verifies against the root certificate and `eec.pem`; a failure is an error |
+| 11 | Every `manifest.json.sig` verifies against the root certificate and `certs/awesome-dsc-plugin-eec.crt`; a failure is an error |
 
 ### Verification semantics
 
-- Pre-release verification in this repository is strict: `pnpm build` and every CI step abort with a non-zero exit code on any error, so non-compliant content is never distributed. `pnpm verify` passes `--allow-placeholder-eec` by default for an empty collection and local development: a missing root certificate, an `eec.pem` that does not chain to it, or manifests and manifest signatures that do not exist yet become warnings. `--allow-missing-manifest` relaxes only the missing-manifest and missing-signature errors while structure and hash checks still run.
+- Pre-release verification in this repository is strict: `scripts/build-from-catalog.mjs` and every CI step abort with a non-zero exit code on any error, so non-compliant content is never distributed. `pnpm verify` passes `--allow-placeholder-eec` by default for an empty collection and local development: a missing root certificate, a `certs/awesome-dsc-plugin-eec.crt` that does not chain to it, or manifests and manifest signatures that do not exist yet become warnings. `--allow-missing-manifest` relaxes only the missing-manifest and missing-signature errors while structure and hash checks still run.
 - Verification after distribution is lenient: on the plugin market side, certificate chain checks, plugin signature checks and web asset signature checks only warn. They never block and never fall back, and the user decides whether to continue.
 - Signatures cover file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere.
 
@@ -198,31 +210,28 @@ The EEC certificate is issued by the root CA of the DeepSeek-Chat-Enhanced repos
    ```
 
 2. Submit `eec.csr` to the DeepSeek-Chat-Enhanced repository (the root CA maintainer) with the purpose, validity period and contact.
-3. Overwrite the root `eec.pem` of this repository with the issued certificate.
+3. Write the issued certificate to `certs/awesome-dsc-plugin-eec.crt` in this repository; the root no longer carries an `eec.pem`.
 4. Put the contents of `eec_secret.pem` into the GitHub Actions secret `EEC_SECRET_KEY`; never commit it.
-5. After merge, CI checks the chain of `eec.pem` against the root certificate and aborts on a broken chain, an expired certificate, or a `keyUsage` or `basicConstraints` mismatch.
+5. After merge, CI checks the chain of `certs/awesome-dsc-plugin-eec.crt` against the root certificate and aborts on a broken chain, an expired certificate, or a `keyUsage` or `basicConstraints` mismatch.
 
-The root private key lives in the offline environment of the DeepSeek-Chat-Enhanced repository; this repository and CI neither have nor need it. The `eec.pem` committed here is a placeholder: it is not issued by the root CA and must not be used for real signing, and it must be replaced before any real distribution.
+The root private key lives in the offline environment of the DeepSeek-Chat-Enhanced repository; this repository and CI neither have nor need it. The committed `certs/awesome-dsc-plugin-eec.crt` carries public material only and is issued by that root CA; CI can also override it with the secret `EEC_CERT_PEM`, and the override still has to pass the chain check.
 
 ## Repository layout
 
 ```text
 awesome-dsc-plugin/
 ├── .github/
-│   ├── plugins-sources.json            import source manifest, editing it changes the result
-│   ├── plugins-sources.README.md       field reference
-│   └── workflows/build-and-deploy.yml  import, chain check, manifest signing, self-check, publish
+│   ├── pipeline.README.md              pipeline notes: certificate location, bundle layout, manifest coverage
+│   ├── plugins-sources.json            legacy import source manifest, still read by `pnpm run import`
+│   ├── plugins-sources.README.md       legacy source manifest field reference
+│   └── workflows/build-and-deploy.yml  pull plugins, re-sign, assemble the bundle, verify independently, publish
 ├── .gitattributes                      enforce LF line endings
 ├── .gitignore
 ├── LICENSE
 ├── README.md
 ├── README.en-US.md
-├── eec.pem                             end-entity signing certificate, overwritten by the root CA of DeepSeek-Chat-Enhanced
-├── meta.json                           collection metadata, holds the download counting switch
-├── datalog.json                        plugin catalog array, one entry per plugin (plugin_name, author, tag)
-├── tags.json                           preset tags
-├── manifest.json                       L1 manifest, committed with the source
-├── manifest.json.sig                   L1 manifest signature, committed with the source
+├── meta.json                           collection metadata with the download counting switch; source of the bundle meta.json
+├── tags.json                           preset tags; source of the bundle tags.json
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
@@ -233,37 +242,33 @@ awesome-dsc-plugin/
 │       ├── author_pub.pem              author public key, Ed25519, OpenSSL PEM
 │       └── <plugin>/                   one directory per plugin
 │           └── plugin.json             plugin registration, holds base_url
+├── certs/                              collection certificate, ships with the bundle, covered by no manifest
+│   ├── awesome-dsc-plugin-eec.crt      collection end-entity signing certificate (EEC), issued by the root CA
+│   └── awesome-dsc-plugin-secret.pub   public key material matching the EEC private key
 ├── schemas/                            every JSON Schema of this repository
 │   ├── README.md                       schema index
 │   ├── manifest.schema.json            JSON Schema of the three manifests
 │   ├── catalog-author.schema.json      JSON Schema of author.json
 │   └── catalog-plugin.schema.json      JSON Schema of plugin.json
+├── site/                               static showcase site project; its output goes to the bundle root
+│   ├── README.md                       site notes: data sources, build and output
+│   ├── build.mjs                       build script, Node built-ins only
+│   ├── package.json
+│   └── src/                            site source: index.html and assets/
 ├── plugins/
-│   ├── author_manifest.json            registered authors
-│   ├── manifest.json                   L2 manifests are generated per author directory
-│   └── <author>/
-│       ├── author_pub.pem              the author's Ed25519 public key
-│       ├── plugin_manifest.json        the author's plugin list
-│       ├── manifest.json               L2 manifest
-│       ├── manifest.json.sig           L2 manifest signature
-│       └── <plugin>/
-│           ├── versions.json           version list
-│           ├── manifest.json           L3 manifest
-│           ├── manifest.json.sig       L3 manifest signature
-│           └── <x.y.z>/
-│               ├── meta.json           plugin runtime metadata
-│               ├── plugin.js           plugin runtime script
-│               ├── plugin.js.sig       collection CMS signature
-│               └── plugin.js.author.sig  author bare public key signature (optional)
+│   └── README.md                       plugin tree notes; the plugin data itself is a build artifact and is not committed
 └── scripts/
     ├── pki.mjs                         OpenSSL PKI wrapper, drives the CLI only
     ├── lib/collection-verify.mjs       shared verification logic
-    ├── build-collection.mjs            build and sign the three manifests, verify, produce dist/
+    ├── lib/catalog.mjs                 reads catalog registrations, fetches versions and artifacts via base_url
+    ├── lib/layer-manifests.mjs         generates and signs the three manifests layer by layer
+    ├── build-from-catalog.mjs          assembles the pages bundle from catalog/, the CI entry point
+    ├── build-collection.mjs            builds and signs the three manifests for a collection directory, verifies, produces dist/
     ├── verify-collection.mjs           read-only consistency check
-    └── import-plugins.mjs              build and import plugins from the source manifest
+    └── import-plugins.mjs              build and import plugins from the legacy source manifest
 ```
 
-The scripts under `scripts/` are byte-identical to [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template). Change the template first and then sync this repository, so the two never drift in verification semantics. `dist/` and `temp/` are generated directories and are not committed: the first is produced by `pnpm build`, the second is the scratch workspace of the import step.
+`datalog.json`, the plugin data under `plugins/`, `manifest.json` and `manifest.json.sig` are now build artifacts of the pages bundle and are not committed: CI generates them into `dist/pages/` at release time, gathering plugin data from `catalog/` and each author's `base_url`. `dist/`, `site/dist/` and `temp/` are generated directories and are not committed either. The verification semantics of `scripts/lib/collection-verify.mjs` and `scripts/pki.mjs` follow [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template): change the template first and then sync this repository, so the two never drift.
 
 ## Collection metadata
 
@@ -279,12 +284,12 @@ This collection does not enable download counting.
 
 ## Import flow
 
-1. Open a PR that edits `.github/plugins-sources.json`, one entry per plugin with `repo`, `author` and `plugin`, plus optional `ref` and `profile`. Fields are documented in [plugins-sources.README.md](.github/plugins-sources.README.md).
-2. After merge, CI imports the plugins from the source manifest: fetch the source, run `pnpm install --frozen-lockfile` and `pnpm build`, write the artifact and the author signature into `plugins/<author>/<plugin>/<version>/`, then update that plugin's `versions.json`, the author's `plugin_manifest.json` and the root `datalog.json`. The file-by-file mapping is in [plugins-sources.README.md](.github/plugins-sources.README.md).
-3. Tags are added by hand. A new entry starts with an empty `tag` array in `datalog.json` and needs tags picked from `tags.json`. Verification rejects tags that are not declared there.
-4. Merge and distribute. CI resolves the root certificate, checks the `eec.pem` chain with `openssl verify`, signs every version's `plugin.js` and generates the three manifests plus their signatures with `EEC_SECRET_KEY`, verifies `dist/` again and self-checks the three manifest signatures against the root certificate, then commits the changes to `plugins/`, `datalog.json` and every `manifest.json` and `manifest.json.sig` back to the repository while publishing `dist/` to Pages.
+1. Open a PR that registers the plugin in `catalog/`: `catalog/<author>/author.json`, `catalog/<author>/author_pub.pem` and `catalog/<author>/<plugin>/plugin.json`. Fields, schemas and the submission checks are documented in [catalog/README.md](catalog/README.md).
+2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC.
+3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from the repository root, `datalog.json` is generated from `catalog/`, `catalog/` and `certs/` are copied verbatim, and the L1, L2 and L3 manifests are generated and signed layer by layer.
+4. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes replaces the published site wholesale, keeping no versions.
 
-A failure during import only skips that plugin and logs the reason; the remaining plugins are still processed. A failure during signing or verification aborts the whole build.
+Any failure aborts with a non-zero exit code and nothing half-built is published: an invalid registration, a failed fetch, a failed signature or a failed self-check stops the whole build.
 
 ## How to submit a plugin
 
@@ -299,6 +304,7 @@ catalog/<author>/
 ```
 
 - `base_url` points at the plugin's own publishing site; CI fetches every version and artifact of the plugin from that address and re-signs them with the collection EEC before writing them into the pages bundle. Releases carry no assets and no assets are fetched from a release.
+- `author_pub.pem` must be submitted even when no author signature is planned: a directory without the key is not accepted.
 - Versions are not registered in `catalog/`; CI discovers them from `base_url`, and `catalog/<author>/<plugin>/<version>/` is only a placeholder level.
 - To withdraw, delete your `catalog/<author>/` directory and open a PR.
 
@@ -306,19 +312,19 @@ Fields, the public key command, what happens after inclusion and the structural 
 
 ## How the plugin market consumes this collection
 
-The market reads collection metadata and the plugin catalog, then fetches each manifest, brings `eec.pem` into the trust anchors through the root certificate, verifies the manifest signature and only then fetches plugin files and artifact signatures. The table below is the path contract this repository promises, consumed in order relative to `base_url`.
+The market reads collection metadata and the plugin catalog, then fetches each manifest, brings `certs/awesome-dsc-plugin-eec.crt` into the trust anchors through the root certificate, verifies the manifest signature and only then fetches plugin files and artifact signatures. The table below is the path contract this repository promises, consumed in order relative to `base_url`.
 
 | Step | Path | Purpose |
 |:---:|:---:|:---:|
 | 1 | `<base_url>/meta.json` | Decide whether the source enables download counting |
 | 2 | `<base_url>/datalog.json` | List every plugin, author and tag |
-| 3 | `<base_url>/eec.pem` | Fetch the end-entity certificate and validate its chain against the root certificate |
+| 3 | `<base_url>/certs/awesome-dsc-plugin-eec.crt` | Fetch the collection end-entity certificate and validate its chain against the root certificate; the root has no `eec.pem` |
 | 4 | `<base_url>/manifest.json` and `manifest.json.sig` | Verify the L1 signature and the SHA-512 values it records |
 | 5 | `<base_url>/plugins/<author>/manifest.json` and `manifest.json.sig` | Verify the L2 manifest and obtain the author public key and plugin list |
 | 6 | `<base_url>/plugins/<author>/<plugin>/manifest.json` and `manifest.json.sig` | Verify the L3 manifest and obtain digests of `versions.json` and every version's `meta.json` |
 | 7 | `<base_url>/plugins/<author>/<plugin>/versions.json` | Fetch the version list and latest version |
 | 8 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/meta.json` | Fetch plugin metadata and compare it with the digest recorded by L3 |
-| 9 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/plugin.js` and `plugin.js.sig` | Fetch the runtime script and verify it against `eec.pem` |
+| 9 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/plugin.js` and `plugin.js.sig` | Fetch the runtime script and verify it against the collection certificate |
 | 10 | `<base_url>/plugins/<author>/author_pub.pem` and `plugin.js.author.sig` | When an author signature exists, fetch the author key and signature |
 
 Any failed check only raises a warning and never blocks plugin loading, matching the lenient semantics described above.
@@ -333,9 +339,9 @@ The specification requires cross-origin sources to be limited to trusted origins
 
 ```bash
 pnpm install
+pnpm build:site    # build the site into site/dist; the output goes to the pages bundle root
 pnpm verify        # read-only consistency check; chain, manifest and signature problems downgrade to warnings without a root certificate
-pnpm build         # generate the three manifests and dist/ after verification, plus build-info.json as the distribution index
-pnpm run import    # import plugins from the source manifest
+pnpm build         # generate the three manifests and dist/ for a collection directory, plus build-info.json as the distribution index
 ```
 
 - `pnpm verify` and `pnpm build` run in skeleton mode when no usable certificate chain is available, which suits an empty collection and local development. Once the root certificate is at hand, verify strictly:
@@ -345,8 +351,23 @@ pnpm run import    # import plugins from the source manifest
   ROOT_CA_PATH=root_ca.crt pnpm verify:strict
   ```
 
-- `pnpm build` without `--sign` only generates manifests and produces no signatures: whenever a manifest changes, the script deletes that layer's stale `manifest.json.sig` so a manifest that can never verify is not distributed. Use `pnpm sign` to sign: it reads `EEC_SECRET_KEY`, signs every version's `plugin.js` and the three manifests, and first confirms that the key matches `eec.pem`. Verification after signing needs a root certificate, so run `ROOT_CA_PATH=root_ca.crt pnpm sign`, or call the script directly with `--root-ca`.
-- Use `pnpm run import` for imports. `pnpm import` is pnpm's own command, not this repository's import script.
+- `pnpm build` without `--sign` only generates manifests and produces no signatures: whenever a manifest changes, the script deletes that layer's stale `manifest.json.sig` so a manifest that can never verify is not distributed. Use `pnpm sign` to sign: it reads `EEC_SECRET_KEY`, signs every version's `plugin.js` and the three manifests, and first confirms that the key matches `certs/awesome-dsc-plugin-eec.crt`. Verification after signing needs a root certificate, so run `ROOT_CA_PATH=root_ca.crt pnpm sign`, or call the script directly with `--root-ca`.
+- `pnpm verify` and `pnpm build` check the collection directory given by `--dir` (the package.json scripts default to the current directory), which must already hold `meta.json`, `datalog.json`, `plugins/` and the three manifests; to check a built pages bundle, pass the directory explicitly:
+
+  ```bash
+  node scripts/verify-collection.mjs --dir dist/pages --root-ca root_ca.crt
+  ```
+
+- CI assembles the pages bundle by calling the script directly; reproducing it locally needs the EEC private key and the root certificate:
+
+  ```bash
+  EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
+    node scripts/build-from-catalog.mjs \
+    --catalog catalog --certs certs --site site/dist --out dist/pages \
+    --published-base https://omdsc-dev.github.io/awesome-dsc-plugin/
+  ```
+
+- The legacy import entry point `pnpm run import` reads `.github/plugins-sources.json`; new registrations go through `catalog/` and CI assembles the bundle at Release time, so no local import is needed.
 - OpenSSL 3.0 or newer is required locally; the scripts only drive the `openssl` CLI and implement no cryptography.
 
 ## Security notes
@@ -354,7 +375,7 @@ pnpm run import    # import plugins from the source manifest
 - When a signature fails, the plugin market warns the user and suggests downloading again; it never runs silently.
 - Inclusion is not endorsement. A signature only proves that distributed content matches its signer, not that plugin behaviour was reviewed.
 - Keep private keys in CI secrets and local environment variables only. The EEC private key lives in `EEC_SECRET_KEY`; the root private key never enters this repository. `.gitignore` already excludes `.env`.
-- Replacing the EEC key pair requires replacing `eec.pem` and requesting a new certificate from the DeepSeek-Chat-Enhanced repository; CMS signatures made with the old certificate stop verifying.
+- Replacing the EEC key pair requires replacing `certs/awesome-dsc-plugin-eec.crt` and requesting a new certificate from the DeepSeek-Chat-Enhanced repository; CMS signatures made with the old certificate stop verifying.
 - Manifest and artifact signatures cover file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere; author artifacts must be LF too.
 - Minifying the artifact is recommended: it shrinks the payload and avoids meaningless whitespace differences.
 
