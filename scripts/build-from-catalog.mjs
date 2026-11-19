@@ -8,11 +8,12 @@
  * 不读 GitHub Release 资产,也不读任何镜像。
  *
  * 产出(pages 根目录):
- *   index.html 与 assets/           来自 site 构建产物
- *   meta.json、tags.json、datalog.json 三个索引文件,由本脚本生成
- *   manifest.json、manifest.json.sig L1 清单及其签名
- *   catalog/、certs/                来自 main 分支,不纳入任何清单
- *   plugins/                        按 catalog 拉取并构建出的父子树
+ *   index.html 与 assets/              来自 site 构建产物
+ *   meta.json、tags.json、datalog.json  三个索引文件,由本脚本生成
+ *   manifest.json、manifest.json.sig   L1 清单及其签名
+ *   catalog/                           登记信息复制,并额外生成 index.json 与 anomalies.json
+ *   certs/                             来自 main 分支,不纳入任何清单
+ *   plugins/                           按 catalog 拉取并构建出的父子树
  *
  * plugins 树:
  *   plugins/author_manifest.json
@@ -23,12 +24,20 @@
  *   plugins/<作者>/<插件>/manifest.json(+ .sig)          L3
  *   plugins/<作者>/<插件>/<版本>/{meta.json,plugin.js,plugin.js.sig[,plugin.js.author.sig]}
  *
- * 任一步失败即整体失败:所有产出先落在临时目录,全部校验通过后才替换 --out,
- * 因此不会留下半成品。pages 根目录不放 eec.pem,合集证书只在 certs/awesome-dsc-plugin-eec.crt。
+ * 两类问题的处理边界,实现里严格区分:
+ *   登记不合规   catalog 里的文件本身不合法(缺字段、name 与目录不符、tags 结构或取值不合规等)。
+ *                这是作者需要修正的登记错误,构建以非零退出码中止,一个插件都不发布。
+ *   运行期异常   作者站点拉取失败(网络、HTTP 4xx/5xx)、远端 versions.json 不合法、
+ *                远端 meta.json 与登记不符、plugin.js 为空等。只剔除该插件,其余插件照常构建与发布;
+ *                剔除项写入 catalog/anomalies.json,由 scripts/report-build-anomalies.mjs 上报到仓库 Issue。
+ *   签名失败、清单生成失败、分发自检失败既不是登记错误也不是单个插件的问题,仍按构建失败处理。
+ *
+ * 所有产出先落在临时目录,全部校验通过后才替换 --out,因此不会留下半成品。
+ * pages 根目录不放 eec.pem,合集证书只在 certs/awesome-dsc-plugin-eec.crt。
  *
  * 用法:
- *   EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt node scripts/build-from-catalog.mjs \\
- *     --catalog catalog --certs certs --site site/dist --out dist/pages \\
+ *   EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt node scripts/build-from-catalog.mjs \
+ *     --catalog catalog --certs certs --site site/dist --out dist/pages \
  *     --published-base https://omdsc-dev.github.io/awesome-dsc-plugin/
  */
 import {
@@ -45,6 +54,7 @@ import {
 import { basename, join, resolve } from 'node:path'
 import { formatProblems, verifyCollection } from './lib/collection-verify.mjs'
 import { buildLayerManifests, listLayerDirs, problem } from './lib/layer-manifests.mjs'
+import { buildAnomalyReport, buildCatalogIndex } from './lib/catalog-index.mjs'
 import { EEC_CERT_BASENAME, certMatchesKey, requireOpenssl, resolveKeyFile, signFileCms, verifyChain } from './pki.mjs'
 import { fetchVersion, fetchVersions, readCatalog } from './lib/catalog.mjs'
 
@@ -61,6 +71,20 @@ const RESERVED_TOP_LEVEL = [
   'eec.pem',
 ]
 
+/** pages 包 catalog 目录里的汇总索引文件名 */
+const CATALOG_INDEX_FILE = 'index.json'
+/** pages 包 catalog 目录里的异常清单文件名 */
+const ANOMALIES_FILE = 'anomalies.json'
+
+/** 拉取异常:带阶段标记,便于异常清单写清失败发生在哪一步 */
+class StageError extends Error {
+  constructor(stage, message) {
+    super(message)
+    this.name = 'StageError'
+    this.stage = stage
+  }
+}
+
 function usage() {
   process.stdout.write([
     '用法: node scripts/build-from-catalog.mjs [选项]',
@@ -72,6 +96,7 @@ function usage() {
     '  --out <目录>              分发包输出目录,默认 dist/pages',
     '  --meta <文件>             合集元数据来源,默认 meta.json',
     '  --tags <文件>             预设标签来源,默认 tags.json',
+    '  --release-tag <tag>       本次发布的 tag,写入 catalog/index.json 与 catalog/anomalies.json',
     '  --published-base <地址>   已发布站点基址,用于读取上一次的清单 revision;取不到时从 1 开始',
     '  --root-ca <路径>          根证书路径,给出时对分发包做证书链与签名自检',
     '  --collection-name <名称>  合集名称,默认取 package.json 的 name',
@@ -82,6 +107,7 @@ function usage() {
     '  EEC_SECRET_KEY            终端签名私钥,PEM 文本或文件路径;必需',
     '  ROOT_CA_PATH              根证书路径,等价于 --root-ca',
     '  PUBLISHED_BASE            已发布站点基址,等价于 --published-base',
+    '  GITHUB_REF_NAME           本次发布的 tag,等价于 --release-tag',
     '',
   ].join('\n'))
 }
@@ -94,6 +120,7 @@ function parseArgs(argv) {
     out: join('dist', 'pages'),
     meta: 'meta.json',
     tags: 'tags.json',
+    releaseTag: null,
     publishedBase: null,
     rootCa: null,
     collectionName: null,
@@ -119,6 +146,7 @@ function parseArgs(argv) {
       case '--out': options.out = take(); break
       case '--meta': options.meta = take(); break
       case '--tags': options.tags = take(); break
+      case '--release-tag': options.releaseTag = take(); break
       case '--published-base': options.publishedBase = take(); break
       case '--root-ca': options.rootCa = take(); break
       case '--collection-name': options.collectionName = take(); break
@@ -171,6 +199,47 @@ function copyTree(srcDir, destDir) {
     } else if (entry.isFile()) {
       copyFileSync(src, dest)
       count += 1
+    }
+  }
+  return count
+}
+
+/**
+ * 把 catalog 目录复制进 pages 包,跳过本次发布剔除的作者与插件。
+ * 跳过是为了让 pages 包里的 catalog 与 plugins 树保持同一套收录范围:
+ * 被剔除的插件不留下悬挂的登记目录,交叉校验脚本因此可以直接比对两棵树。
+ * @param {object} context 上下文
+ * @param {string} context.catalogDir 仓库 catalog 目录
+ * @param {string} context.destDir pages 包的 catalog 目录
+ * @param {Set<string>} context.excludedAuthors 被整体剔除的作者
+ * @param {Set<string>} context.excludedPlugins 被剔除的插件,键为 <作者>/<插件>
+ * @returns {number} 复制的文件数
+ */
+function copyCatalogTree({ catalogDir, destDir, excludedAuthors, excludedPlugins }) {
+  if (!existsSync(catalogDir)) return 0
+  mkdirSync(destDir, { recursive: true })
+  let count = 0
+  for (const entry of readdirSync(catalogDir, { withFileTypes: true }).sort((left, right) => (left.name < right.name ? -1 : 1))) {
+    const src = join(catalogDir, entry.name)
+    const dest = join(destDir, entry.name)
+    if (entry.isFile()) {
+      copyFileSync(src, dest)
+      count += 1
+      continue
+    }
+    if (!entry.isDirectory()) continue
+    if (excludedAuthors.has(entry.name)) continue
+    mkdirSync(dest, { recursive: true })
+    for (const child of readdirSync(src, { withFileTypes: true }).sort((left, right) => (left.name < right.name ? -1 : 1))) {
+      const childSrc = join(src, child.name)
+      const childDest = join(dest, child.name)
+      if (child.isDirectory()) {
+        if (excludedPlugins.has(entry.name + '/' + child.name)) continue
+        count += copyTree(childSrc, childDest)
+      } else if (child.isFile()) {
+        copyFileSync(childSrc, childDest)
+        count += 1
+      }
     }
   }
   return count
@@ -286,91 +355,144 @@ function signPlugins(root, signer, problems) {
 }
 
 /**
- * 按 catalog 拉取并写出 plugins 树。
- * 每个插件的版本列表来自 base_url/versions.json,逐版本拉 meta.json、plugin.js 与可选作者签名。
- * 任何一项校验失败都记为 error,调用方在 error 非空时不产出分发包。
+ * 从作者站点拉取一个插件的全部版本产物,先放进内存。
+ * 只有全部版本都通过校验才落盘,因此单个插件不会在 plugins 树里留下半成品目录。
+ * @param {object} plugin catalog 里的插件记录
+ * @param {{timeoutMs: number}} options 选项
+ * @returns {Promise<{latest: string, versions: string[], releases: Array<object>}>}
  */
-async function writePluginsTree({ staging, catalog, problems, timeoutMs }) {
+async function pullPlugin(plugin, { timeoutMs }) {
+  let versionsInfo
+  try {
+    versionsInfo = await fetchVersions(plugin.baseUrl, { timeoutMs })
+  } catch (error) {
+    throw new StageError('versions', 'versions.json 拉取或解析失败:' + error.message)
+  }
+  const releases = []
+  for (const version of versionsInfo.versions) {
+    let payload
+    try {
+      payload = await fetchVersion(plugin.baseUrl, version, { timeoutMs })
+    } catch (error) {
+      throw new StageError('version', version + ' 的版本产物拉取失败:' + error.message)
+    }
+    const meta = payload.meta
+    if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) {
+      throw new StageError('meta', version + ' 的 meta.json 必须是对象')
+    }
+    if (meta.name !== plugin.name) {
+      throw new StageError('meta', version + ' 的 meta.json name 为 ' + JSON.stringify(meta.name) + ',要求 ' + plugin.name)
+    }
+    if (meta.version !== version) {
+      throw new StageError('meta', version + ' 的 meta.json version 为 ' + JSON.stringify(meta.version) + ',要求 ' + version)
+    }
+    if (!payload.pluginJs || payload.pluginJs.length === 0) {
+      throw new StageError('bundle', version + ' 的 plugin.js 为空')
+    }
+    if (payload.authorSig && payload.authorSig.length === 0) {
+      throw new StageError('author-signature', version + ' 的 plugin.js.author.sig 为空')
+    }
+    releases.push({ version, meta, pluginJs: payload.pluginJs, authorSig: payload.authorSig })
+  }
+  return { latest: versionsInfo.latest, versions: versionsInfo.versions, releases }
+}
+
+/** 把拉取到的版本产物落盘为一个插件目录。 */
+function writePluginFiles(pluginDir, pulled) {
+  writeJsonFile(join(pluginDir, 'versions.json'), { latest: pulled.latest, versions: pulled.versions })
+  for (const release of pulled.releases) {
+    const versionDir = join(pluginDir, release.version)
+    mkdirSync(versionDir, { recursive: true })
+    writeJsonFile(join(versionDir, 'meta.json'), release.meta)
+    writeFileSync(join(versionDir, 'plugin.js'), release.pluginJs)
+    if (release.authorSig) writeFileSync(join(versionDir, 'plugin.js.author.sig'), release.authorSig)
+  }
+}
+
+/**
+ * 按 catalog 拉取并写出 plugins 树。
+ * 拉取失败的插件只记入 anomalies 并跳过,不影响其余插件;
+ * catalog 本身的登记错误在进入本函数之前就已经让构建失败。
+ * @param {object} context 上下文
+ * @param {string} context.staging 临时输出目录
+ * @param {{authors: Array<object>, plugins: Array<object>}} context.catalog catalog 读取结果
+ * @param {Array<object>} context.anomalies 剔除记录收集数组
+ * @param {Array<object>} context.problems 问题收集数组
+ * @param {number} context.timeoutMs 单次请求超时
+ * @returns {Promise<{includedAuthors: Array<object>, includedPlugins: Array<object>, versionCount: number}>}
+ */
+async function writePluginsTree({ staging, catalog, anomalies, problems, timeoutMs }) {
   const pluginsDir = join(staging, 'plugins')
   mkdirSync(pluginsDir, { recursive: true })
-  writeJsonFile(
-    join(pluginsDir, 'author_manifest.json'),
-    catalog.authors.map((author) => ({ username: author.username, profile: author.profile })).sort((left, right) => (left.username < right.username ? -1 : 1)),
-  )
-
+  const includedAuthors = []
+  const includedPlugins = []
   let versionCount = 0
+
   for (const author of catalog.authors) {
+    const pulledPlugins = []
+    for (const plugin of author.plugins) {
+      try {
+        const pulled = await pullPlugin(plugin, { timeoutMs })
+        pulledPlugins.push({ plugin, pulled })
+      } catch (error) {
+        if (!(error instanceof StageError)) throw error
+        anomalies.push({
+          author: author.username,
+          plugin: plugin.name,
+          stage: error.stage,
+          reason: error.message,
+          base_url: plugin.baseUrl,
+        })
+        problems.push(
+          problem(
+            'warning',
+            'PLUGIN_EXCLUDED',
+            '插件 ' + author.username + '/' + plugin.name + ' 已从本次发布剔除(阶段 ' + error.stage + '):' + error.message,
+            plugin.pluginRel,
+          ),
+        )
+      }
+    }
+    if (pulledPlugins.length === 0) {
+      if (author.plugins.length > 0) {
+        problems.push(
+          problem('warning', 'AUTHOR_EXCLUDED', '作者 ' + author.username + ' 的插件全部被剔除,本次发布不写入该作者目录', author.authorRel),
+        )
+      }
+      continue
+    }
+
     const authorDir = join(pluginsDir, author.username)
     mkdirSync(authorDir, { recursive: true })
     copyFileSync(author.pubPath, join(authorDir, 'author_pub.pem'))
     writeJsonFile(
       join(authorDir, 'plugin_manifest.json'),
-      author.plugins.map((plugin) => plugin.name).sort(),
+      pulledPlugins.map((item) => item.plugin.name).sort(),
     )
 
-    for (const plugin of author.plugins) {
+    for (const { plugin, pulled } of pulledPlugins) {
       const pluginDir = join(authorDir, plugin.dirName)
       mkdirSync(pluginDir, { recursive: true })
-      let versionsInfo
-      try {
-        versionsInfo = await fetchVersions(plugin.baseUrl, { timeoutMs })
-      } catch (error) {
-        problems.push(problem('error', 'VERSIONS_FETCH_FAILED', plugin.name + ' 的版本列表拉取失败:' + error.message, plugin.pluginRel + '/' + 'plugin.json'))
-        continue
-      }
-      writeJsonFile(join(pluginDir, 'versions.json'), { latest: versionsInfo.latest, versions: versionsInfo.versions })
-
-      for (const version of versionsInfo.versions) {
-        const versionDir = join(pluginDir, version)
-        mkdirSync(versionDir, { recursive: true })
-        let payload
-        try {
-          payload = await fetchVersion(plugin.baseUrl, version, { timeoutMs })
-        } catch (error) {
-          problems.push(problem('error', 'VERSION_FETCH_FAILED', plugin.name + ' ' + version + ' 拉取失败:' + error.message, plugin.pluginRel))
-          continue
-        }
-        const meta = payload.meta
-        if (typeof meta !== 'object' || meta === null || Array.isArray(meta)) {
-          problems.push(problem('error', 'VERSION_META_INVALID', plugin.name + ' ' + version + ' 的 meta.json 必须是对象', plugin.pluginRel))
-          continue
-        }
-        if (meta.name !== plugin.name) {
-          problems.push(
-            problem('error', 'VERSION_META_MISMATCH', plugin.name + ' ' + version + ' 的 meta.json name 为 ' + JSON.stringify(meta.name) + ',要求 ' + plugin.name, plugin.pluginRel),
-          )
-          continue
-        }
-        if (meta.version !== version) {
-          problems.push(
-            problem('error', 'VERSION_META_MISMATCH', plugin.name + ' ' + version + ' 的 meta.json version 为 ' + JSON.stringify(meta.version) + ',要求 ' + version, plugin.pluginRel),
-          )
-          continue
-        }
-        if (!payload.pluginJs || payload.pluginJs.length === 0) {
-          problems.push(problem('error', 'PLUGIN_JS_EMPTY', plugin.name + ' ' + version + ' 的 plugin.js 为空', plugin.pluginRel))
-          continue
-        }
-        writeJsonFile(join(versionDir, 'meta.json'), meta)
-        writeFileSync(join(versionDir, 'plugin.js'), payload.pluginJs)
-        if (payload.authorSig) {
-          if (payload.authorSig.length === 0) {
-            problems.push(problem('error', 'AUTHOR_SIG_EMPTY', plugin.name + ' ' + version + ' 的 plugin.js.author.sig 为空', plugin.pluginRel))
-          } else {
-            writeFileSync(join(versionDir, 'plugin.js.author.sig'), payload.authorSig)
-          }
-        }
-        versionCount += 1
-      }
+      writePluginFiles(pluginDir, pulled)
+      versionCount += pulled.releases.length
+      includedPlugins.push({ ...plugin, latest: pulled.latest, versionCount: pulled.releases.length })
     }
+    includedAuthors.push({ username: author.username, profile: author.profile, plugins: pulledPlugins.map((item) => item.plugin) })
   }
-  return versionCount
+
+  writeJsonFile(
+    join(pluginsDir, 'author_manifest.json'),
+    includedAuthors
+      .map((author) => ({ username: author.username, profile: author.profile }))
+      .sort((left, right) => (left.username < right.username ? -1 : 1)),
+  )
+  return { includedAuthors, includedPlugins, versionCount }
 }
 
-/** 生成 datalog.json:每个插件一条,标签暂缺,统一写空数组。 */
+/** 生成 datalog.json:每个插件一条,tag 取自该插件 plugin.json 的 tags。 */
 function buildDatalog(plugins) {
   return plugins
-    .map((plugin) => ({ plugin_name: plugin.name, author: plugin.author, tag: [] }))
+    .map((plugin) => ({ plugin_name: plugin.name, author: plugin.author, tag: Array.isArray(plugin.tags) ? [...plugin.tags] : [] }))
     .sort((left, right) => (left.plugin_name < right.plugin_name ? -1 : 1))
 }
 
@@ -388,14 +510,53 @@ function readCollectionMeta(path) {
   return data
 }
 
-/** 读取预设标签,必须是字符串数组。 */
-function readTags(path) {
+/**
+ * 读取预设标签清单,必须是元素非空、互不重复的字符串数组。
+ * 文件缺失时按空清单处理并记警告:此时任何标签都会被视为未登记。
+ * @param {string} path tags.json 路径
+ * @param {Array<object>} problems 问题收集数组
+ * @returns {string[]} 预设标签
+ */
+function readTags(path, problems) {
+  if (!existsSync(path)) {
+    problems.push(problem('warning', 'TAGS_FILE_MISSING', '预设标签文件不存在:' + path + ',本次构建按空清单处理', 'tags.json'))
+    return []
+  }
   const data = readJsonFile(path, 'tags.json')
   if (!Array.isArray(data)) throw new Error('tags.json 的顶层必须是字符串数组')
+  const seen = new Set()
   for (const tag of data) {
-    if (typeof tag !== 'string' || tag.length === 0) throw new Error('tags.json 含非字符串或空标签')
+    if (typeof tag !== 'string' || tag.trim().length === 0) throw new Error('tags.json 含非字符串或空标签')
+    if (seen.has(tag)) throw new Error('tags.json 含重复标签 ' + tag)
+    seen.add(tag)
   }
   return data
+}
+
+/**
+ * 校验每个插件声明的标签都在 tags.json 的预设清单内。
+ * 越界标签属于登记错误:构建直接中止并指出是哪个插件、哪个标签,而不是静默丢弃该标签。
+ * @param {object} context 上下文
+ * @param {{plugins: Array<object>}} context.catalog catalog 读取结果
+ * @param {string[]} context.presetTags 预设标签
+ * @param {Array<object>} context.problems 问题收集数组
+ */
+function checkPresetTags({ catalog, presetTags, problems }) {
+  const allowed = new Set(presetTags)
+  for (const plugin of catalog.plugins) {
+    for (const tag of plugin.tags) {
+      if (!allowed.has(tag)) {
+        problems.push(
+          problem(
+            'error',
+            'PLUGIN_TAG_UNKNOWN',
+            '插件 ' + plugin.name + '(作者 ' + plugin.author + ')的标签 ' + JSON.stringify(tag) + ' 不在 tags.json 的预设清单内',
+            plugin.pluginRel + '/plugin.json',
+          ),
+        )
+      }
+    }
+  }
 }
 
 /**
@@ -462,14 +623,26 @@ async function main() {
   const outDir = resolve(options.out)
   const rootCaPath = options.rootCa ? resolve(options.rootCa) : process.env.ROOT_CA_PATH ? resolve(process.env.ROOT_CA_PATH) : null
   const publishedBase = options.publishedBase || process.env.PUBLISHED_BASE || null
+  const releaseTag = options.releaseTag || process.env.GITHUB_REF_NAME || process.env.RELEASE_TAG || null
+  const collectionName = resolveCollectionName(options)
 
   if (rootCaPath && !existsSync(rootCaPath)) throw new Error('根证书不存在:' + rootCaPath)
 
   const problems = []
   inspectSite(siteDir, problems)
+  const presetTags = readTags(resolve(options.tags), problems)
   const catalog = readCatalog({ catalogDir, problems })
+  checkPresetTags({ catalog, presetTags, problems })
+
   if (!isDirectory(certsDir)) throw new Error('证书目录不存在:' + certsDir)
   if (!existsSync(join(certsDir, EEC_CERT_BASENAME))) throw new Error('证书目录缺少 ' + EEC_CERT_BASENAME + ':' + certsDir)
+
+  // 登记不合规在这里就中止:不让作者带着不合法的登记进入拉取阶段,也不发布任何插件。
+  const registrationErrors = problems.filter((item) => item.level === 'error')
+  if (registrationErrors.length > 0) {
+    process.stderr.write('catalog 登记不合规,共 ' + registrationErrors.length + ' 个错误,未开始拉取插件:\n' + formatProblems(problems) + '\n')
+    return 1
+  }
 
   const staging = outDir + '.staging-' + process.pid + '-' + Date.now()
   let signer = null
@@ -477,20 +650,34 @@ async function main() {
     rmSync(staging, { recursive: true, force: true })
     mkdirSync(staging, { recursive: true })
 
-    const versionCount = await writePluginsTree({ staging, catalog, problems, timeoutMs: options.timeout })
-    const errors = problems.filter((item) => item.level === 'error')
-    if (errors.length > 0) {
-      process.stderr.write('拉取或校验插件失败,共 ' + errors.length + ' 个错误:\n' + formatProblems(problems) + '\n')
-      return 1
-    }
+    const anomalies = []
+    const { includedAuthors, includedPlugins, versionCount } = await writePluginsTree({
+      staging,
+      catalog,
+      anomalies,
+      problems,
+      timeoutMs: options.timeout,
+    })
 
-    // site 产物放根目录,再把 catalog 与 certs 原样复制进来
+    // site 产物放根目录,再把 catalog 与 certs 复制进来
     copyTree(siteDir, staging)
-    const catalogFiles = copyTree(catalogDir, join(staging, 'catalog'))
+    const includedAuthorNames = new Set(includedAuthors.map((author) => author.username))
+    const excludedAuthors = new Set(catalog.authors.filter((author) => !includedAuthorNames.has(author.username)).map((author) => author.username))
+    const excludedPlugins = new Set(anomalies.map((item) => item.author + '/' + item.plugin))
+    const catalogFiles = copyCatalogTree({ catalogDir, destDir: join(staging, 'catalog'), excludedAuthors, excludedPlugins })
     const certFiles = copyTree(certsDir, join(staging, 'certs'))
+
     writeJsonFile(join(staging, 'meta.json'), readCollectionMeta(resolve(options.meta)))
-    writeJsonFile(join(staging, 'tags.json'), readTags(resolve(options.tags)))
-    writeJsonFile(join(staging, 'datalog.json'), buildDatalog(catalog.plugins))
+    writeJsonFile(join(staging, 'tags.json'), presetTags)
+    writeJsonFile(join(staging, 'datalog.json'), buildDatalog(includedPlugins))
+    writeJsonFile(
+      join(staging, 'catalog', CATALOG_INDEX_FILE),
+      buildCatalogIndex({ collectionName, releaseTag, authors: includedAuthors, plugins: includedPlugins }),
+    )
+    writeJsonFile(
+      join(staging, 'catalog', ANOMALIES_FILE),
+      buildAnomalyReport({ collectionName, releaseTag, anomalies }),
+    )
 
     if (existsSync(join(staging, 'eec.pem'))) {
       throw new Error('分发包根目录不允许出现 eec.pem;合集证书只在 certs/' + EEC_CERT_BASENAME)
@@ -525,7 +712,7 @@ async function main() {
     }
 
     if (rootCaPath) {
-      const result = verifyCollection(staging, { rootCaPath, collectionName: resolveCollectionName(options) })
+      const result = verifyCollection(staging, { rootCaPath, collectionName })
       if (!result.ok) {
         process.stderr.write('分发包自检未通过,共 ' + result.errorCount + ' 个错误:\n' + formatProblems(result.problems) + '\n')
         return 1
@@ -545,12 +732,21 @@ async function main() {
 
     process.stdout.write(
       '分发包已生成:' + outDir + '\n' +
-      '  作者 ' + catalog.authors.length + ' 个,插件 ' + catalog.plugins.length + ' 个,版本 ' + versionCount + ' 个\n' +
+      '  作者 ' + includedAuthors.length + ' 个,插件 ' + includedPlugins.length + ' 个,版本 ' + versionCount + ' 个\n' +
       '  plugin.js 已用合集 EEC 重新签名 ' + signedCount + ' 份\n' +
-      '  catalog 复制 ' + catalogFiles + ' 个文件,certs 复制 ' + certFiles + ' 个文件\n',
+      '  catalog 复制 ' + catalogFiles + ' 个文件,certs 复制 ' + certFiles + ' 个文件\n' +
+      '  catalog/' + CATALOG_INDEX_FILE + ' 记录作者 ' + includedAuthors.length + ' 个、插件 ' + includedPlugins.length + ' 个\n',
     )
     for (const item of manifests) {
       process.stdout.write('  ' + item.layer + ' 清单 ' + item.dir + '/manifest.json revision=' + item.revision + ',覆盖 ' + item.files + ' 个文件' + (item.changed ? '(已更新)' : '(未变化)') + '\n')
+    }
+    if (anomalies.length > 0) {
+      process.stdout.write('剔除了 ' + anomalies.length + ' 个插件,发布未受影响;异常清单 catalog/' + ANOMALIES_FILE + ':\n')
+      for (const item of anomalies) {
+        process.stdout.write('  - ' + item.author + '/' + item.plugin + ' [阶段 ' + item.stage + '] ' + item.reason + '\n')
+      }
+    } else {
+      process.stdout.write('本次构建没有剔除任何插件(catalog/' + ANOMALIES_FILE + ' 为空清单)\n')
     }
     const warnings = problems.filter((item) => item.level === 'warning')
     if (warnings.length > 0) {

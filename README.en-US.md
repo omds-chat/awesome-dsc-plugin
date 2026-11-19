@@ -31,7 +31,7 @@ The collection is published as a pages bundle: on every Release CI pulls the plu
 ├── datalog.json                       # L1, plugin catalog generated from catalog/
 ├── manifest.json                      # L1 manifest
 ├── manifest.json.sig                  # L1 manifest signature
-├── catalog/                           # registrations, copied verbatim, covered by no manifest
+├── catalog/                           # registrations copied over, plus the generated index.json and anomalies.json; covered by no manifest
 ├── certs/                             # trust material, copied verbatim, covered by no manifest
 │   └── awesome-dsc-plugin-eec.crt     # collection end-entity signing certificate, issued by the root CA
 └── plugins/
@@ -223,17 +223,15 @@ The root private key lives in the offline environment of the DeepSeek-Chat-Enhan
 ```text
 awesome-dsc-plugin/
 ├── .github/
-│   ├── pipeline.README.md              pipeline notes: certificate location, bundle layout, manifest coverage
-│   ├── plugins-sources.json            legacy import source manifest, still read by `pnpm run import`
-│   ├── plugins-sources.README.md       legacy source manifest field reference
-│   └── workflows/build-and-deploy.yml  pull plugins, re-sign, assemble the bundle, verify independently, publish
+│   ├── pipeline.README.md              pipeline notes: certificate location, bundle layout, manifest coverage, anomaly reporting
+│   └── workflows/build-and-deploy.yml  pull plugins, re-sign, assemble the bundle, verify independently, cross-check, report anomalies, publish
 ├── .gitattributes                      enforce LF line endings
 ├── .gitignore
 ├── LICENSE
 ├── README.md
 ├── README.en-US.md
 ├── meta.json                           collection metadata with the download counting switch; source of the bundle meta.json
-├── tags.json                           preset tags; source of the bundle tags.json
+├── tags.json                           preset tag list (including ui-enhance); source of the bundle tags.json
 ├── datalog.json                        empty baseline; the real content is built into the pages bundle
 ├── manifest.json                       empty baseline; the real content is built into the pages bundle
 ├── manifest.json.sig                   empty baseline; the real content is built into the pages bundle
@@ -242,11 +240,12 @@ awesome-dsc-plugin/
 ├── pnpm-workspace.yaml
 ├── catalog/                            registration: author identity, public key and plugin site
 │   ├── README.md                       author guide
+│   ├── removed.json                    plugins no longer hosted, ships with the bundle
 │   └── <author>/                       one directory per author, named after username
 │       ├── author.json                 author identity
 │       ├── author_pub.pem              author public key, Ed25519, OpenSSL PEM
 │       └── <plugin>/                   one directory per plugin
-│           └── plugin.json             plugin registration, holds base_url
+│           └── plugin.json             plugin registration, holds base_url and optional tags
 ├── certs/                              collection certificate, ships with the bundle, covered by no manifest
 │   ├── awesome-dsc-plugin-eec.crt      collection end-entity signing certificate (EEC), issued by the root CA
 │   └── awesome-dsc-plugin-secret.pub   public key material matching the EEC private key
@@ -254,7 +253,9 @@ awesome-dsc-plugin/
 │   ├── README.md                       schema index
 │   ├── manifest.schema.json            JSON Schema of the three manifests
 │   ├── catalog-author.schema.json      JSON Schema of author.json
-│   └── catalog-plugin.schema.json      JSON Schema of plugin.json
+│   ├── catalog-plugin.schema.json      JSON Schema of plugin.json
+│   ├── catalog-removed.schema.json     JSON Schema of removed.json
+│   └── catalog-index.schema.json       JSON Schema of the bundle catalog/index.json
 ├── site/                               static showcase site project; its output goes to the bundle root
 │   ├── README.md                       site notes: data sources, build and output
 │   ├── build.mjs                       build script, Node built-ins only
@@ -268,11 +269,13 @@ awesome-dsc-plugin/
     ├── pki.mjs                         OpenSSL PKI wrapper, drives the CLI only
     ├── lib/collection-verify.mjs       shared verification logic
     ├── lib/catalog.mjs                 reads catalog registrations, fetches versions and artifacts via base_url
+    ├── lib/catalog-index.mjs           generates catalog/index.json and catalog/anomalies.json
     ├── lib/layer-manifests.mjs         generates and signs the three manifests layer by layer
     ├── build-from-catalog.mjs          assembles the pages bundle from catalog/, the CI entry point
     ├── build-collection.mjs            builds and signs the three manifests for a collection directory, verifies, produces dist/
     ├── verify-collection.mjs           read-only consistency check
-    └── import-plugins.mjs              build and import plugins from the legacy source manifest
+    ├── verify-catalog-consistency.mjs  cross-checks index, datalog, author manifest and both trees after a build
+    └── report-build-anomalies.mjs      reports excluded plugins as an issue, never blocks the release
 ```
 
 `datalog.json`, `manifest.json`, `manifest.json.sig` and `plugins/author_manifest.json` are committed only as empty baselines: they let repository-level verification (`pnpm verify`) find the files it requires and give the build a defined landing spot. The real content is written into the pages bundle by CI at Release time, and the author, plugin and version data under `plugins/<author>/` exists only in the bundle and is never committed. `dist/`, `site/dist/` and `temp/` are pure generated directories and are not committed. The verification semantics of `scripts/lib/collection-verify.mjs` and `scripts/pki.mjs` follow [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template): change the template first and then sync this repository, so the two never drift.
@@ -293,12 +296,20 @@ This collection does not enable download counting.
 
 1. Open a PR that registers the plugin in `catalog/`: `catalog/<author>/author.json`, `catalog/<author>/author_pub.pem` and `catalog/<author>/<plugin>/plugin.json`. Fields, schemas and the submission checks are documented in [catalog/README.md](catalog/README.md).
 2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC.
-3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from the repository root, `datalog.json` is generated from `catalog/`, `catalog/` and `certs/` are copied verbatim, and the L1, L2 and L3 manifests are generated and signed layer by layer.
-4. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes replaces the published site wholesale, keeping no versions.
+3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from the repository root, `datalog.json` and `catalog/index.json` are generated from `catalog/`, `catalog/` and `certs/` are copied over, and the L1, L2 and L3 manifests are generated and signed layer by layer.
+4. It cross-checks the result: `scripts/verify-catalog-consistency.mjs` compares `catalog/index.json`, `datalog.json`, `plugins/author_manifest.json`, the `catalog/` copy and the `plugins/` tree, and aborts with a non-zero exit code listing every difference.
+5. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes replaces the published site wholesale, keeping no versions.
 
-Any failure aborts with a non-zero exit code and nothing half-built is published: an invalid registration, a failed fetch, a failed signature or a failed self-check stops the whole build.
+The build separates two kinds of problem; the boundary is implemented in `scripts/build-from-catalog.mjs` and documented in [catalog/README.md](catalog/README.md):
 
-Every `tag` in `datalog.json` is currently an empty array: tags are not in effect yet, `plugin.json` in `catalog/` carries no tag field, and `tags.json` only ships as the list of preset tags.
+| Kind | Decision | Build behaviour |
+|:---:|:---:|:---:|
+| Invalid registration | A registration file in `catalog/` is itself invalid: missing fields, `name` not matching its directory, malformed `tags`, or a tag outside the `tags.json` preset list | A registration error: the build aborts with a non-zero exit code, no plugin is published, and the author fixes the registration |
+| Runtime anomaly | The author site fails to fetch (network, HTTP 4xx/5xx), the remote `versions.json` is invalid, the remote `meta.json` disagrees with the registration, or `plugin.js` is empty | Only that plugin is excluded from this release; every other plugin is built and published as usual, and the exclusion goes into `catalog/anomalies.json` and is reported as an issue |
+
+Signing failures, manifest generation failures and bundle self-check failures are neither an author registration error nor a single-plugin runtime problem, so they still fail the build.
+
+Every `tag` in `datalog.json` comes from that plugin `plugin.json` `tags`, and an omitted `tags` means an empty array. Tag values must come from the preset list in the repository root `tags.json`; a tag outside it fails the build and names the plugin and the tag.
 
 ## How to submit a plugin
 
@@ -309,13 +320,13 @@ catalog/<author>/
 ├── author.json        author identity: username and profile
 ├── author_pub.pem     author public key, OpenSSL PEM, Ed25519
 └── <plugin>/
-    └── plugin.json    plugin registration: name, description, license, repo_link, base_url
+    └── plugin.json    plugin registration: name, description, license, repo_link, base_url, optional tags
 ```
 
 - `base_url` points at the plugin's own publishing site; CI fetches every version and artifact of the plugin from that address and re-signs them with the collection EEC before writing them into the pages bundle. Releases carry no assets and no assets are fetched from a release.
 - `author_pub.pem` must be submitted even when no author signature is planned: a directory without the key is not accepted.
 - Versions are not registered in `catalog/`; CI discovers them from `base_url`, and `catalog/<author>/<plugin>/<version>/` is only a placeholder level.
-- To withdraw, delete your `catalog/<author>/` directory and open a PR.
+- To withdraw, delete your `catalog/<author>/` directory, append one entry to `catalog/removed.json` and open a PR.
 
 Fields, the public key command, what happens after inclusion and the structural schemas are documented in [catalog/README.md](catalog/README.md).
 
@@ -337,6 +348,8 @@ The market reads collection metadata and the plugin catalog, then fetches each m
 | 10 | `<base_url>/plugins/<author>/author_pub.pem` and `plugin.js.author.sig` | When an author signature exists, fetch the author key and signature |
 
 Any failed check only raises a warning and never blocks plugin loading, matching the lenient semantics described above.
+
+`catalog/index.json` is the aggregate index for the site and outside readers: the author list (`username`, `profile`, plugin count) and the plugin list (author, name, description, license, repository link, current version, tags, version count). The build generates it for exactly what it collected; it is not part of distribution integrity, it is covered by no manifest, and the market may read it directly or keep following the layer-by-layer table above.
 
 ## Cross-origin access
 
@@ -376,7 +389,7 @@ pnpm build         # generate the three manifests and dist/ for a collection dir
     --published-base https://omdsc-dev.github.io/awesome-dsc-plugin/
   ```
 
-- The legacy import entry point `pnpm run import` reads `.github/plugins-sources.json`; new registrations go through `catalog/` and CI assembles the bundle at Release time, so no local import is needed.
+- Two standalone entry points after a build: `pnpm verify:consistency` cross-checks the collected information in `dist/pages`; `node scripts/report-build-anomalies.mjs --dry-run` prints the reporting request body without sending anything, and a real re-report only needs `GITHUB_TOKEN` without `--dry-run`.
 - OpenSSL 3.0 or newer is required locally; the scripts only drive the `openssl` CLI and implement no cryptography.
 
 ## Security notes

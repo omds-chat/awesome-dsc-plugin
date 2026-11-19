@@ -30,6 +30,15 @@
       "minLength": 1,
       "description": "插件自己发布的站点基址,http 或 https 开头的绝对地址,必须以斜杠结尾。CI 只从这个地址取版本与产物,不从 Release 取任何资产。",
       "pattern": "^https?://[^/\\s?#]+(?:/[^?\\s#]*)?/$"
+    },
+    "tags": {
+      "type": "array",
+      "description": "插件标签,可省略,省略等价于空数组。元素必须是非空字符串且不重复;取值必须来自仓库根 tags.json 的预设清单,不在清单内会让构建失败。",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
     }
   },
   "required": [
@@ -46,7 +55,8 @@
       "description": "把对话里的图片整理成画廊视图。",
       "license": "Apache-2.0",
       "repo_link": "https://github.com/omdsc-dev/dsc-plugin-gallery",
-      "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/"
+      "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+      "tags": ["ui-enhance"]
     }
   ]
 }

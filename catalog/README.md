@@ -7,12 +7,13 @@
 ```text
 catalog/
 ├── README.md
+├── removed.json              已解除托管的插件清单
 └── <作者>/
-    ├── author.json          作者身份
-    ├── author_pub.pem       作者公钥,OpenSSL PEM
+    ├── author.json           作者身份
+    ├── author_pub.pem        作者公钥,OpenSSL PEM
     └── <插件>/
-        ├── plugin.json      插件登记
-        └── <版本>/          占位,当前不用于登记
+        ├── plugin.json       插件登记
+        └── <版本>/           占位,当前不用于登记
 ```
 
 - `<作者>` 是目录名,必须与 `author.json` 的 `username` 逐字符一致,也是分发站点里 `plugins/<作者>/` 的目录名。
@@ -64,6 +65,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 | `license` | string | 必填,非空。插件许可证,建议写 SPDX 标识,例如 `Apache-2.0` |
 | `repo_link` | string | 必填,非空。插件源码仓库地址,写完整绝对地址 |
 | `base_url` | string | 必填,非空。插件自己发布的站点基址,`http` 或 `https` 开头的绝对地址,必须以斜杠结尾 |
+| `tags` | string[] | 可选,省略等价于空数组。标签数组,元素非空、互不重复,取值必须来自下文「预设标签」 |
 
 ```json
 {
@@ -71,12 +73,31 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
   "description": "把对话里的图片整理成画廊视图。",
   "license": "Apache-2.0",
   "repo_link": "https://github.com/omdsc-dev/dsc-plugin-gallery",
-  "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/"
+  "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+  "tags": ["ui-enhance"]
 }
 ```
 
-- 五个字段全部必填,多写字段会被拒绝,结构以 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 为准。
+- 前五个字段必填,`tags` 可选,多写字段会被拒绝,结构以 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 为准。
 - `base_url` 只写站点根,不写具体文件,不带查询串或锚点;少写结尾斜杠会被拒绝。
+
+## 预设标签
+
+标签的预设清单是仓库根 [tags.json](../tags.json),构建时随 pages 包分发到 `<base_url>/tags.json`。插件只能使用清单里的标签:
+
+| 标签 | 说明 |
+|:---:|:---:|
+| `ui` | 调整界面外观与交互布局。 |
+| `ui-enhance` | 在不改动主界面的前提下增强现有界面能力,例如为消息、输入框或侧栏补充辅助操作。 |
+| `workflow` | 改造对话流程与操作步骤。 |
+| `tools` | 增加或扩展可调用的工具。 |
+| `data` | 导入、导出或整理对话与本地数据。 |
+| `integration` | 接入外部服务与第三方平台。 |
+| `security` | 提升本地数据与通信安全的防护。 |
+
+- 构建时 `datalog.json` 的 `tag` 直接取自各插件 `plugin.json` 的 `tags`,省略时为空数组。
+- 标签不在预设清单内按构建错误处理:构建中止,并指出是哪个插件、哪个标签;不会静默丢弃或自动补标签。
+- 要新增标签,先在 `tags.json` 里登记,再在插件里使用,两者在同一个 PR 里提交。
 
 ## base_url 指向什么
 
@@ -97,23 +118,57 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 
 合并 PR 后,CI 构建 pages 包时:
 
-1. 用 [catalog-author.schema.json](../schemas/catalog-author.schema.json) 与 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 校验登记文件,并检查公钥格式;不合规的条目直接报错,整个构建以非零退出码中止,不会跳过该条目继续发布其余内容。
+1. 用 [catalog-author.schema.json](../schemas/catalog-author.schema.json) 与 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 校验登记文件,检查公钥格式,并确认每个标签都在 `tags.json` 的预设清单内。
 2. 到 `base_url` 拉取该插件的全部版本与产物。
 3. 用合集 EEC 给每个版本的 `plugin.js` 重新签名,产出 `plugin.js.sig`;作者的 `plugin.js.author.sig` 原样保留。
-4. 把公钥、版本列表、各版本元数据写入 pages 包的 `plugins/` 目录,把 `catalog` 与 `certs` 原样复制进 pages,再生成 L1、L2、L3 三层清单与清单签名。
-5. 每次 Release 全量重建 pages 并直接替换,不做版本留存;L1 的 `revision` 从已发布站点的 `manifest.json` 读上一次的值加一,取不到时从 1 开始。
-6. `catalog` 与 `certs` 随 pages 分发,但不进任何一层清单,它们是登记信息与信任材料。
+4. 把公钥、版本列表、各版本元数据写入 pages 包的 `plugins/` 目录,把 `catalog` 与 `certs` 复制进 pages,再生成 L1、L2、L3 三层清单与清单签名。
+5. 生成 pages 包 `catalog/` 下的两份汇总文件:`index.json`(作者列表与插件列表,含当前版本、标签与版本数)与 `anomalies.json`(本次发布被剔除的插件)。
+6. 用 `scripts/verify-catalog-consistency.mjs` 交叉校验 `catalog/index.json`、`datalog.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止。
+7. 每次 Release 全量重建 pages 并直接替换,不做版本留存;L1 的 `revision` 从已发布站点的 `manifest.json` 读上一次的值加一,取不到时从 1 开始。
+8. `catalog` 与 `certs` 随 pages 分发,但不进任何一层清单,它们是登记信息与信任材料。
 
-`datalog.json` 的 `tag` 当前恒为空数组:标签暂不生效,`plugin.json` 没有标签字段,`tags.json` 只作为预设标签清单随包分发。
+### 登记错误与运行期异常的边界
+
+构建把「作者要改的东西」和「运行期偶然失败」分开处理,这条边界在 `scripts/build-from-catalog.mjs` 里实现:
+
+| 类别 | 判定 | 构建行为 |
+|:---:|:---:|:---:|
+| 登记不合规 | `catalog/` 里的文件本身不合法:缺字段、`name` 与目录不符、`tags` 结构不合法或标签不在预设清单内、公钥不可解析 | 登记错误,构建以非零退出码中止,一个插件都不发布,等待作者修正 |
+| 运行期异常 | 作者站点拉取失败(网络、HTTP 4xx/5xx)、远端 `versions.json` 不合法、远端 `meta.json` 与登记不符、`plugin.js` 为空 | 只把该插件从本次发布剔除,其余插件照常发布;剔除项写入 `catalog/anomalies.json` 并上报到仓库 Issue |
+
+剔除是「本次不发布」,不是「解除登记」:插件目录仍留在 `catalog/` 里,修好站点后下次 Release 会自动回到发布里。真要解除托管,见下节「下架」。
+
+签名失败、清单生成失败与分发自检失败既不是登记错误,也不是单个插件的运行期问题,仍按构建失败处理。
 
 插件市场按 pages 包的路径取用插件,作者不需要为分发再做别的准备。
 
 ## 下架
 
-- 下架某个插件:删除 `catalog/<作者>/<插件>/` 整个目录并提交 PR。
-- 整体退出:删除 `catalog/<作者>/` 整个目录并提交 PR。
+- 下架某个插件:删除 `catalog/<作者>/<插件>/` 整个目录,并在 [removed.json](removed.json) 追加一条记录,然后提交 PR。
+- 整体退出:删除 `catalog/<作者>/` 整个目录,作者名下每个插件都要在 `removed.json` 各留一条记录,然后提交 PR。
 - 直接删干净,不要留空目录或 TODO 文件占位;下次 Release 重建 pages 后,被删除的条目从分发内容里消失。
+- `removed.json` 是顶层数组,每条记录的字段:
+
+| 字段 | 类型 | 说明 |
+|:---:|:---:|:---:|
+| `name` | string | 必填,非空。被移除的插件名,与移除前的 `plugin.json` 一致 |
+| `base_url` | string | 必填,非空。移除前的发布站点基址,便于外部查阅追认来源 |
+| `removed_in` | string | 必填,非空。移除发生在哪个发布版本,写 release tag,例如 `v2.0.0` |
+| `note` | string | 可选,非空。一句话说明移除原因或后续去向 |
+
+```json
+[
+  {
+    "name": "dsc-plugin-gallery",
+    "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+    "removed_in": "v2.0.0",
+    "note": "作者改为独立分发,不再随本合集发布。"
+  }
+]
+```
+
+`removed.json` 随 pages 包分发到 `<base_url>/catalog/removed.json`,结构以 [catalog-removed.schema.json](../schemas/catalog-removed.schema.json) 为准。
 
 ## 提交校验
 
-两份 schema 只约束结构,字段含义见 [schemas/README.md](../schemas/README.md)。CI 除结构外还会检查公钥格式与 `base_url` 可达性,结构合法不等于收录通过。收录不等于认证,签名只证明分发内容与签名者一致。
+各份 schema 只约束结构,字段含义见 [schemas/README.md](../schemas/README.md)。CI 除结构外还会检查公钥格式、标签是否属于预设清单与 `base_url` 可达性,结构合法不等于收录通过。收录不等于认证,签名只证明分发内容与签名者一致。

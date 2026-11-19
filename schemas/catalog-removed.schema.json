@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omdsc-dev.github.io/awesome-dsc-plugin/schemas/catalog-removed.schema.json",
+  "title": "dsc-plugin-collection-catalog-removed",
+  "description": "catalog/removed.json 的结构:记录已解除托管的插件。作者下架作品时删除自己的 catalog 目录,并在本文件追加一条。",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "已移除的插件名,与被移除前的 plugin.json 的 name 一致。"
+      },
+      "base_url": {
+        "type": "string",
+        "minLength": 1,
+        "description": "该插件移除前的发布站点基址,便于外部查阅追认来源。"
+      },
+      "removed_in": {
+        "type": "string",
+        "minLength": 1,
+        "description": "移除发生在哪个发布版本,写 release tag,例如 v2.0.0。"
+      },
+      "note": {
+        "type": "string",
+        "minLength": 1,
+        "description": "可选,一句话说明移除原因或后续去向。"
+      }
+    },
+    "required": [
+      "name",
+      "base_url",
+      "removed_in"
+    ],
+    "additionalProperties": false
+  },
+  "examples": [
+    [
+      {
+        "name": "dsc-plugin-gallery",
+        "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+        "removed_in": "v2.0.0",
+        "note": "作者改为独立分发,不再随本合集发布。"
+      }
+    ]
+  ]
+}

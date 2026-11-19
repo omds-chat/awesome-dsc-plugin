@@ -4,7 +4,10 @@
  * catalog 只登记作者与其插件,不含任何产物:
  *   catalog/<作者>/author.json        {username, profile}
  *   catalog/<作者>/author_pub.pem     作者公钥,PEM
- *   catalog/<作者>/<插件>/plugin.json {name, description, license, repo_link, base_url}
+ *   catalog/<作者>/<插件>/plugin.json {name, description, license, repo_link, base_url, tags?}
+ *
+ * plugin.json 的 tags 是可选字符串数组,省略等价于空数组;元素必须是非空字符串且不重复。
+ * 标签取值是否属于仓库根 tags.json 的预设清单,由构建脚本另行校验,本模块只校验结构。
  *
  * 版本内容只有一种来源:插件作者自己发布的 base_url 站点。
  * 本模块不读 Release 资产,也不读任何镜像。
@@ -32,6 +35,10 @@ export const DEFAULT_TIMEOUT_MS = 30000
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const PLUGIN_NAME_PATTERN = /^(?:dsc-[a-z0-9][a-z0-9._-]*|@[a-z0-9][a-z0-9._-]*\/dsc-[a-z0-9][a-z0-9._-]*)$/
 const PLUGIN_FIELDS = ['name', 'description', 'license', 'repo_link', 'base_url']
+/** plugin.json 的可选字段:省略等价于空数组 */
+const PLUGIN_OPTIONAL_FIELDS = ['tags']
+/** catalog 根目录允许出现的说明与登记文件,不按登记格式解析 */
+const CATALOG_ROOT_FILES = ['README.md', 'removed.json']
 
 function isDirectory(path) {
   try {
@@ -73,6 +80,46 @@ function readJsonFile(path, label, problems) {
 }
 
 /**
+ * 校验 plugin.json 的可选 tags:字符串数组,元素非空且不重复,省略等价于空数组。
+ * 结构不合法时记 error 并返回 null,调用方跳过该插件;取值是否属于预设清单不在这里判断。
+ * @param {any} data plugin.json 内容
+ * @param {string} label 报错用路径
+ * @param {Array<object>} problems 问题收集数组
+ * @returns {string[]|null} 标签数组,或 null 表示结构不合法
+ */
+function readPluginTags(data, label, problems) {
+  if (!Object.prototype.hasOwnProperty.call(data, 'tags')) return []
+  const tags = data.tags
+  if (!Array.isArray(tags)) {
+    problems.push(problem('error', 'PLUGIN_TAGS_INVALID', label + ' 的 tags 必须是字符串数组', label))
+    return null
+  }
+  const seen = new Set()
+  const normalized = []
+  let valid = true
+  for (const tag of tags) {
+    if (typeof tag !== 'string' || tag.trim().length === 0) {
+      problems.push(problem('error', 'PLUGIN_TAGS_INVALID', label + ' 的 tags 含空值或非字符串元素:' + JSON.stringify(tag), label))
+      valid = false
+      continue
+    }
+    if (tag !== tag.trim()) {
+      problems.push(problem('error', 'PLUGIN_TAGS_INVALID', label + ' 的标签 ' + JSON.stringify(tag) + ' 首尾含空白', label))
+      valid = false
+      continue
+    }
+    if (seen.has(tag)) {
+      problems.push(problem('error', 'PLUGIN_TAGS_DUPLICATE', label + ' 的标签 ' + JSON.stringify(tag) + ' 重复出现', label))
+      valid = false
+      continue
+    }
+    seen.add(tag)
+    normalized.push(tag)
+  }
+  return valid ? normalized : null
+}
+
+/**
  * 读取并校验 catalog 目录。
  * 任一硬性字段缺失或自相矛盾都记为 error;调用方在 errors 非空时整体失败。
  * @param {object} context 上下文
@@ -91,7 +138,9 @@ export function readCatalog({ catalogDir, problems }) {
   const seenPlugins = new Set()
   for (const entry of entries) {
     if (!entry.isDirectory()) {
-      problems.push(problem('warning', 'CATALOG_ENTRY_IGNORED', 'catalog 根目录下的文件 ' + entry.name + ' 不属于登记格式,已忽略', 'catalog/' + entry.name))
+      if (!CATALOG_ROOT_FILES.includes(entry.name)) {
+        problems.push(problem('warning', 'CATALOG_ENTRY_IGNORED', 'catalog 根目录下的文件 ' + entry.name + ' 不属于登记格式,已忽略', 'catalog/' + entry.name))
+      }
       continue
     }
     const username = entry.name
@@ -171,7 +220,7 @@ export function readCatalog({ catalogDir, problems }) {
         }
       }
       for (const key of Object.keys(data)) {
-        if (!PLUGIN_FIELDS.includes(key)) {
+        if (!PLUGIN_FIELDS.includes(key) && !PLUGIN_OPTIONAL_FIELDS.includes(key)) {
           problems.push(problem('warning', 'PLUGIN_FIELD_UNKNOWN', pluginRel + '/' + PLUGIN_FILE + ' 含未知字段 ' + key + ',已忽略', pluginRel + '/' + PLUGIN_FILE))
         }
       }
@@ -196,6 +245,8 @@ export function readCatalog({ catalogDir, problems }) {
         problems.push(problem('error', 'PLUGIN_BASE_URL_INVALID', pluginRel + '/' + PLUGIN_FILE + ' 的 base_url 必须是 http(s) 绝对地址:' + JSON.stringify(data.base_url), pluginRel + '/' + PLUGIN_FILE))
         continue
       }
+      const tags = readPluginTags(data, pluginRel + '/' + PLUGIN_FILE, problems)
+      if (tags === null) continue
       if (seenPlugins.has(data.name)) {
         problems.push(problem('error', 'PLUGIN_DUPLICATE', '插件名 ' + data.name + ' 在 catalog 中重复登记', pluginRel + '/' + PLUGIN_FILE))
         continue
@@ -207,6 +258,7 @@ export function readCatalog({ catalogDir, problems }) {
         license: data.license,
         repoLink: data.repo_link,
         baseUrl: data.base_url,
+        tags,
         dirName,
         author: username,
         authorDir,

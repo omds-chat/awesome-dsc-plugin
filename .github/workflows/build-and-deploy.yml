@@ -1,7 +1,7 @@
 name: build-and-deploy
 
 # 分发模型:来源只有插件作者自己的 Pages 站点,每个 Release 全量重建 pages 包并直接替换,不做版本留存。
-# 本流程不再把分发包提交回仓库,因此只需要读源码的权限。
+# 本流程不再把分发包提交回仓库,因此只需要读源码的权限;额外的 issues 写权限只用于异常上报。
 on:
   release:
     types:
@@ -12,6 +12,8 @@ permissions:
   contents: read
   pages: write
   id-token: write
+  # 异常上报要写 Issue:构建剔除的插件会追加到追踪 Issue,失败不影响发布
+  issues: write
 
 concurrency:
   group: pages
@@ -129,7 +131,13 @@ jobs:
             --site "$SITE_OUT" \
             --out dist/pages \
             --root-ca "$ROOT_CA_PATH" \
-            --published-base "$published"
+            --published-base "$published" \
+            --release-tag "${GITHUB_REF_NAME:-unknown}"
+
+      # 交叉校验:catalog/index.json、datalog.json、作者清单、catalog 副本与 plugins 树的收录信息必须一致。
+      # 任何不一致都以非零退出码失败并列出差异,避免索引与产物各说各话。
+      - name: Verify catalog consistency
+        run: node scripts/verify-catalog-consistency.mjs --dir dist/pages
 
       # 不经过 Node 脚本,直接用 openssl 独立验签三层清单与每个 plugin.js,避免脚本与 openssl 语义分叉。
       - name: Verify manifests and plugin signatures with openssl
@@ -180,6 +188,9 @@ jobs:
           test -f dist/pages/manifest.json
           test -f dist/pages/manifest.json.sig
           test -d dist/pages/catalog
+          test -f dist/pages/catalog/index.json
+          test -f dist/pages/catalog/anomalies.json
+          test -f dist/pages/catalog/removed.json
           test -d dist/pages/certs
           test -f dist/pages/certs/awesome-dsc-plugin-eec.crt
           if [ -e dist/pages/eec.pem ]; then
@@ -207,6 +218,19 @@ jobs:
 
       - name: Verify pages package
         run: node scripts/verify-collection.mjs --dir dist/pages --root-ca "$ROOT_CA_PATH"
+
+      # 异常上报:只写本仓库 Issue,不进发布产物。
+      # 脚本自己吞掉全部失败并以 0 退出,再加一道 continue-on-error,确保上报问题不阻塞发布。
+      - name: Report excluded plugins
+        if: always()
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node scripts/report-build-anomalies.mjs \
+            --anomalies dist/pages/catalog/anomalies.json \
+            --repo "${{ github.repository }}" \
+            --tag "${{ github.ref_name }}"
 
       - name: Configure Pages
         uses: actions/configure-pages@v5

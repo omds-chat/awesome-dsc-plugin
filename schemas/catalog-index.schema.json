@@ -1,0 +1,222 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://omdsc-dev.github.io/awesome-dsc-plugin/schemas/catalog-index.schema.json",
+  "title": "dsc-plugin-collection-catalog-index",
+  "description": "pages 包 catalog/index.json 的结构。由构建按本次实际收录的作者与插件生成,供站点与外部查阅使用;被剔除的插件不进入本文件。",
+  "type": "object",
+  "properties": {
+    "schemaVersion": {
+      "const": 1,
+      "description": "结构版本,当前固定为 1。"
+    },
+    "collection": {
+      "type": "object",
+      "description": "合集标识与本次发布版本。",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "合集名称,默认取 package.json 的 name。"
+        },
+        "release": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "本次发布的 tag,例如 v2.0.0;本地构建未提供时为 null。"
+        }
+      },
+      "required": [
+        "name",
+        "release"
+      ],
+      "additionalProperties": false
+    },
+    "authors": {
+      "type": "array",
+      "description": "作者列表,按 username 字典序。",
+      "items": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 1,
+            "description": "作者用户名,与 catalog/<作者>/ 的目录名一致。"
+          },
+          "profile": {
+            "type": "string",
+            "description": "作者主页的完整绝对地址;登记缺失时为空字符串。"
+          },
+          "plugin_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "该作者本次收录的插件数。"
+          },
+          "plugins": {
+            "type": "array",
+            "description": "该作者本次收录的插件登记信息,便于站点只读一份文件就画出作者页。",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "description": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "license": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "repo_link": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "base_url": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "required": [
+                "name",
+                "description",
+                "license",
+                "repo_link",
+                "base_url"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "username",
+          "profile",
+          "plugin_count",
+          "plugins"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "description": "插件列表,按插件名与作者字典序。",
+      "items": {
+        "type": "object",
+        "properties": {
+          "author": {
+            "type": "string",
+            "minLength": 1,
+            "description": "插件所属作者。"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "description": "插件名,与 plugin.json 的 name 一致。"
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "description": "一句话说明,取自 plugin.json。"
+          },
+          "license": {
+            "type": "string",
+            "minLength": 1,
+            "description": "许可证,取自 plugin.json。"
+          },
+          "repo_link": {
+            "type": "string",
+            "minLength": 1,
+            "description": "源码仓库地址,取自 plugin.json。"
+          },
+          "base_url": {
+            "type": "string",
+            "minLength": 1,
+            "description": "插件作者自己的发布站点基址。"
+          },
+          "current_version": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "当前版本,取 versions.json 的 latest;插件没有任何可用版本时为 null。"
+          },
+          "tags": {
+            "type": "array",
+            "description": "标签,取自 plugin.json 的 tags;省略 tags 时为空数组。",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "version_count": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "本次收录的版本数。"
+          }
+        },
+        "required": [
+          "author",
+          "name",
+          "description",
+          "license",
+          "repo_link",
+          "base_url",
+          "current_version",
+          "tags",
+          "version_count"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "schemaVersion",
+    "collection",
+    "authors",
+    "plugins"
+  ],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "schemaVersion": 1,
+      "collection": {
+        "name": "awesome-dsc-plugin",
+        "release": "v2.0.0"
+      },
+      "authors": [
+        {
+          "username": "omdsc-dev",
+          "profile": "https://github.com/omdsc-dev",
+          "plugin_count": 1,
+          "plugins": [
+            {
+              "name": "dsc-plugin-gallery",
+              "description": "把对话里的图片整理成画廊视图。",
+              "license": "Apache-2.0",
+              "repo_link": "https://github.com/omdsc-dev/dsc-plugin-gallery",
+              "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/"
+            }
+          ]
+        }
+      ],
+      "plugins": [
+        {
+          "author": "omdsc-dev",
+          "name": "dsc-plugin-gallery",
+          "description": "把对话里的图片整理成画廊视图。",
+          "license": "Apache-2.0",
+          "repo_link": "https://github.com/omdsc-dev/dsc-plugin-gallery",
+          "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+          "current_version": "1.0.0",
+          "tags": [
+            "ui-enhance"
+          ],
+          "version_count": 1
+        }
+      ]
+    }
+  ]
+}

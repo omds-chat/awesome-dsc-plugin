@@ -14,12 +14,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "import": "node scripts/import-plugins.mjs --manifest .github/plugins-sources.json",
     "verify": "node scripts/verify-collection.mjs --dir . --allow-placeholder-eec",
     "verify:strict": "node scripts/verify-collection.mjs --dir .",
     "build": "node scripts/build-collection.mjs --dir . --allow-placeholder-eec --out dist",
     "sign": "node scripts/build-collection.mjs --dir . --sign --out dist",
-    "build:site": "pnpm --dir site build"
+    "build:site": "pnpm --dir site build",
+    "verify:consistency": "node scripts/verify-catalog-consistency.mjs --dir dist/pages",
+    "report:anomalies": "node scripts/report-build-anomalies.mjs --anomalies dist/pages/catalog/anomalies.json"
   },
   "keywords": [
     "dsc",

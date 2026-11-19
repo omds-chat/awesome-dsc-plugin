@@ -18,7 +18,7 @@ pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `
 | `index.html`、`assets/` | site 构建产物 |
 | `meta.json`、`tags.json`、`datalog.json` | 由 `scripts/build-from-catalog.mjs` 生成 |
 | `manifest.json`、`manifest.json.sig` | L1 清单及其签名 |
-| `catalog/` | main 分支的 catalog 目录,原样复制 |
+| `catalog/` | main 分支的 catalog 目录复制进来的登记文件,另加构建生成的 `index.json`(汇总索引)与 `anomalies.json`(剔除清单) |
 | `certs/` | main 分支的 certs 目录,原样复制 |
 | `plugins/` | 由 CI 依据 catalog 拉取并构建 |
 
@@ -72,4 +72,21 @@ openssl cms -verify -binary -md sha512 -inform DER \
 ```
 
 流水线步骤依次为:安装依赖、校验源码树、构建 site、拉取插件、用 EEC 重新签名 `plugin.js`、生成并签名三层清单、
-组装 pages 包、用 openssl 独立验签、结构自检、上传并部署。
+组装 pages 包、交叉校验收录信息、用 openssl 独立验签、结构自检、上报剔除项、上传并部署。
+
+## 六、异常插件与上报
+
+构建把两类问题严格分开,边界在 `scripts/build-from-catalog.mjs` 里实现:
+
+| 类别 | 判定 | 构建行为 |
+|:---:|:---:|:---:|
+| 登记不合规 | `catalog/` 里的文件本身不合法(缺字段、`name` 与目录不符、`tags` 结构或取值不合规、公钥不可解析) | 登记错误,构建以非零退出码中止,不发布任何插件 |
+| 运行期异常 | 作者站点拉取失败、远端 `versions.json` 不合法、远端 `meta.json` 与登记不符、`plugin.js` 为空 | 只剔除该插件,其余插件照常发布;剔除项写入 `catalog/anomalies.json` |
+
+剔除项由 `scripts/report-build-anomalies.mjs` 上报到本仓库 Issue:
+
+- 只用 GitHub REST API,全部请求通过 `curl` 命令行发出,鉴权用 workflow 自带的 `GITHUB_TOKEN`,因此 workflow 需要 `issues: write` 权限。
+- 追踪 Issue 的标题固定为 `[自动] 插件剔除追踪`:已存在就往该 Issue 追加一条评论,不存在就新建一个。
+- 正文包含本次发布的 tag、异常条目表格(作者、插件、阶段、失败原因)与「已自动剔除、未阻塞发布」的说明。
+- 上报失败(令牌缺失、权限不足、API 报错)只打印警告并以 0 退出,不阻塞发布;工作流步骤另有 `continue-on-error` 兜底。
+- 本地可用 `--dry-run --api-base <任意地址>` 只打印请求体,不发任何真实请求。
