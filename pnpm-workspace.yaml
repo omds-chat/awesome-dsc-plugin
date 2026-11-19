@@ -1,4 +1,5 @@
-# 本仓库不引入任何依赖。若后续新增带构建脚本的依赖,在此放行。
+# 本仓库不引入任何依赖;site 是零依赖的静态站点工程,只用 Node 内置模块构建。
 packages:
   - .
+  - site
 onlyBuiltDependencies: []

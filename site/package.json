@@ -1,0 +1,10 @@
+{
+  "name": "awesome-dsc-plugin-site",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "awesome-dsc-plugin 的静态展示站点:浏览作者、插件、版本与签名材料存在性。",
+  "scripts": {
+    "build": "node build.mjs"
+  }
+}

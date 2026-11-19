@@ -18,7 +18,8 @@
     "verify": "node scripts/verify-collection.mjs --dir . --allow-placeholder-eec",
     "verify:strict": "node scripts/verify-collection.mjs --dir .",
     "build": "node scripts/build-collection.mjs --dir . --allow-placeholder-eec --out dist",
-    "sign": "node scripts/build-collection.mjs --dir . --sign --out dist"
+    "sign": "node scripts/build-collection.mjs --dir . --sign --out dist",
+    "build:site": "pnpm --dir site build"
   },
   "keywords": [
     "dsc",
