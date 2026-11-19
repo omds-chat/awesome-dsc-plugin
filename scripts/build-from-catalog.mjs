@@ -2,14 +2,20 @@
 /**
  * 按 catalog 拉取插件并组装 Pages 分发包。
  *
- * 输入只有两类:
+ * 输入有三类:
  *   catalog 目录里的登记信息(author.json、author_pub.pem、plugin.json);
  *   插件作者自己发布的 base_url 站点(versions.json、各版本 meta.json、plugin.js、可选 plugin.js.author.sig)。
  * 不读 GitHub Release 资产,也不读任何镜像。
  *
+ * 输入还有第三类:site 目录里的合集设置。
+ *   site/meta.json                    合集元数据,原样进入 pages 包 meta.json
+ *   site/tags.json                    预设标签,原样进入 pages 包 tags.json
+ * 仓库根不再存放任何分发包索引文件,构建产物只出现在 pages 包里。
+ *
  * 产出(pages 根目录):
  *   index.html 与 assets/              来自 site 构建产物
- *   meta.json、tags.json、datalog.json  三个索引文件,由本脚本生成
+ *   meta.json、tags.json               原样取自 site/meta.json 与 site/tags.json
+ *   datalog.json                       由 catalog 生成
  *   manifest.json、manifest.json.sig   L1 清单及其签名
  *   catalog/                           登记信息复制,并额外生成 index.json 与 anomalies.json
  *   certs/                             来自 main 分支,不纳入任何清单
@@ -94,8 +100,8 @@ function usage() {
     '  --certs <目录>            证书目录,默认 certs',
     '  --site <目录>             site 构建产物目录,默认 site/dist',
     '  --out <目录>              分发包输出目录,默认 dist/pages',
-    '  --meta <文件>             合集元数据来源,默认 meta.json',
-    '  --tags <文件>             预设标签来源,默认 tags.json',
+    '  --meta <文件>             合集元数据来源,默认 site/meta.json',
+    '  --tags <文件>             预设标签来源,默认 site/tags.json',
     '  --release-tag <tag>       本次发布的 tag,写入 catalog/index.json 与 catalog/anomalies.json',
     '  --published-base <地址>   已发布站点基址,用于读取上一次的清单 revision;取不到时从 1 开始',
     '  --root-ca <路径>          根证书路径,给出时对分发包做证书链与签名自检',
@@ -118,8 +124,8 @@ function parseArgs(argv) {
     certs: 'certs',
     site: join('site', 'dist'),
     out: join('dist', 'pages'),
-    meta: 'meta.json',
-    tags: 'tags.json',
+    meta: join('site', 'meta.json'),
+    tags: join('site', 'tags.json'),
     releaseTag: null,
     publishedBase: null,
     rootCa: null,

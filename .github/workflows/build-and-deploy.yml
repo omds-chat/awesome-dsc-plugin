@@ -103,9 +103,9 @@ jobs:
           openssl x509 -in "$eec" -noout -ext basicConstraints
           openssl x509 -in "$eec" -noout -checkend 0
 
-      # 源码树自检:catalog 登记之外的结构问题在这里就暴露,不必等到打包之后。
+      # 仓库级校验:只查 catalog/ 与 certs/ 的结构与证书材料,不读任何构建产物。
       - name: Verify repository
-        run: node scripts/verify-collection.mjs --dir . --allow-placeholder-eec
+        run: node scripts/verify-catalog.mjs
 
       # site 构建产物放到 pages 根目录。站点没有自带构建时,直接用 vars.SITE_DIR 指向的静态产物。
       - name: Build site
@@ -134,10 +134,10 @@ jobs:
             --published-base "$published" \
             --release-tag "${GITHUB_REF_NAME:-unknown}"
 
-      # 交叉校验:catalog/index.json、datalog.json、作者清单、catalog 副本与 plugins 树的收录信息必须一致。
+      # pages 包校验:三层清单、清单签名、产物签名与收录信息交叉一致性一次跑完。
       # 任何不一致都以非零退出码失败并列出差异,避免索引与产物各说各话。
-      - name: Verify catalog consistency
-        run: node scripts/verify-catalog-consistency.mjs --dir dist/pages
+      - name: Verify pages bundle
+        run: node scripts/verify-bundle.mjs --dir dist/pages --root-ca "$ROOT_CA_PATH"
 
       # 不经过 Node 脚本,直接用 openssl 独立验签三层清单与每个 plugin.js,避免脚本与 openssl 语义分叉。
       - name: Verify manifests and plugin signatures with openssl
@@ -215,9 +215,6 @@ jobs:
             done
           done
           echo "pages 结构检查通过"
-
-      - name: Verify pages package
-        run: node scripts/verify-collection.mjs --dir dist/pages --root-ca "$ROOT_CA_PATH"
 
       # 异常上报:只写本仓库 Issue,不进发布产物。
       # 脚本自己吞掉全部失败并以 0 退出,再加一道 continue-on-error,确保上报问题不阻塞发布。

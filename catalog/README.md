@@ -12,14 +12,13 @@ catalog/
     ├── author.json           作者身份
     ├── author_pub.pem        作者公钥,OpenSSL PEM
     └── <插件>/
-        ├── plugin.json       插件登记
-        └── <版本>/           占位,当前不用于登记
+        └── plugin.json       插件登记
 ```
 
 - `<作者>` 是目录名,必须与 `author.json` 的 `username` 逐字符一致,也是分发站点里 `plugins/<作者>/` 的目录名。
 - `<插件>` 是目录名,建议与 `plugin.json` 的 `name` 保持一致。
 - 目录与文件名固定,大小写敏感,不要改名。
-- 顶层出现 `I_AM_AN_AUTHOR` 这样的目录是占位层级,不是真实登记,不要照抄。
+- 结构就是上面这四层,不要创建占位目录、空目录或版本目录:版本不进 catalog,由 CI 从 `base_url` 发现。
 
 ## author.json
 
@@ -83,7 +82,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 
 ## 预设标签
 
-标签的预设清单是仓库根 [tags.json](../tags.json),构建时随 pages 包分发到 `<base_url>/tags.json`。插件只能使用清单里的标签:
+标签的预设清单是 [site/tags.json](../site/tags.json),构建时原样随 pages 包分发到 `<base_url>/tags.json`。仓库根不再存放 `tags.json`,合集设置统一放在 `site/`。插件只能使用清单里的标签:
 
 | 标签 | 说明 |
 |:---:|:---:|
@@ -97,7 +96,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 
 - 构建时 `datalog.json` 的 `tag` 直接取自各插件 `plugin.json` 的 `tags`,省略时为空数组。
 - 标签不在预设清单内按构建错误处理:构建中止,并指出是哪个插件、哪个标签;不会静默丢弃或自动补标签。
-- 要新增标签,先在 `tags.json` 里登记,再在插件里使用,两者在同一个 PR 里提交。
+- 要新增标签,先在 `site/tags.json` 里登记,再在插件里使用,两者在同一个 PR 里提交。
 
 ## base_url 指向什么
 
@@ -107,9 +106,9 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 - 站点必须公开可访问,静态资源可跨域读取。
 - 站点上每个版本目录需要 `meta.json` 与 `plugin.js`;作者自签名 `plugin.js.author.sig` 可选,CI 会原样保留。
 
-## 版本层暂不使用
+## 版本层不进 catalog
 
-`catalog/<作者>/<插件>/<版本>/` 这一层保留为占位,当前不用于登记:
+`catalog/<作者>/<插件>/` 下只放 `plugin.json`,不建版本目录:
 
 - 版本不在本目录登记,由 CI 从 `base_url` 自动发现,作者站点上发布了哪个版本,合集就收录哪个版本。
 - 不要创建版本目录,也不要在其中放 `meta.json`、`plugin.js` 或签名。这些文件由 CI 写入分发的 pages 包,不进本仓库的 catalog。
@@ -118,7 +117,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 
 合并 PR 后,CI 构建 pages 包时:
 
-1. 用 [catalog-author.schema.json](../schemas/catalog-author.schema.json) 与 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 校验登记文件,检查公钥格式,并确认每个标签都在 `tags.json` 的预设清单内。
+1. 用 [catalog-author.schema.json](../schemas/catalog-author.schema.json) 与 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 校验登记文件,检查公钥格式,并确认每个标签都在 `site/tags.json` 的预设清单内。
 2. 到 `base_url` 拉取该插件的全部版本与产物。
 3. 用合集 EEC 给每个版本的 `plugin.js` 重新签名,产出 `plugin.js.sig`;作者的 `plugin.js.author.sig` 原样保留。
 4. 把公钥、版本列表、各版本元数据写入 pages 包的 `plugins/` 目录,把 `catalog` 与 `certs` 复制进 pages,再生成 L1、L2、L3 三层清单与清单签名。
@@ -170,5 +169,11 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 `removed.json` 随 pages 包分发到 `<base_url>/catalog/removed.json`,结构以 [catalog-removed.schema.json](../schemas/catalog-removed.schema.json) 为准。
 
 ## 提交校验
+
+提交 PR 前先在本地跑一遍仓库级校验,它只读 `catalog/` 与 `certs/`,不需要构建产物:
+
+```bash
+pnpm verify:catalog
+```
 
 各份 schema 只约束结构,字段含义见 [schemas/README.md](../schemas/README.md)。CI 除结构外还会检查公钥格式、标签是否属于预设清单与 `base_url` 可达性,结构合法不等于收录通过。收录不等于认证,签名只证明分发内容与签名者一致。

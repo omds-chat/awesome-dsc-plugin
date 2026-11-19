@@ -7,7 +7,7 @@
  *   catalog/<作者>/<插件>/plugin.json {name, description, license, repo_link, base_url, tags?}
  *
  * plugin.json 的 tags 是可选字符串数组,省略等价于空数组;元素必须是非空字符串且不重复。
- * 标签取值是否属于仓库根 tags.json 的预设清单,由构建脚本另行校验,本模块只校验结构。
+ * 标签取值是否属于 site/tags.json 的预设清单,由构建脚本另行校验,本模块只校验结构。
  *
  * 版本内容只有一种来源:插件作者自己发布的 base_url 站点。
  * 本模块不读 Release 资产,也不读任何镜像。

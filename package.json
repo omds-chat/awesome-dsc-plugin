@@ -14,10 +14,11 @@
     "node": ">=20"
   },
   "scripts": {
-    "verify": "node scripts/verify-collection.mjs --dir . --allow-placeholder-eec",
-    "verify:strict": "node scripts/verify-collection.mjs --dir .",
-    "build": "node scripts/build-collection.mjs --dir . --allow-placeholder-eec --out dist",
-    "sign": "node scripts/build-collection.mjs --dir . --sign --out dist",
+    "type": "node scripts/check-syntax.mjs",
+    "verify": "node scripts/verify-catalog.mjs",
+    "verify:catalog": "node scripts/verify-catalog.mjs",
+    "verify:bundle": "node scripts/verify-bundle.mjs --dir dist/pages",
+    "build": "node scripts/build-from-catalog.mjs --catalog catalog --certs certs --site site/dist --out dist/pages",
     "build:site": "pnpm --dir site build",
     "verify:consistency": "node scripts/verify-catalog-consistency.mjs --dir dist/pages",
     "report:anomalies": "node scripts/report-build-anomalies.mjs --anomalies dist/pages/catalog/anomalies.json"

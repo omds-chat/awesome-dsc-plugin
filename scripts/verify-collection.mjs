@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * 合集自洽性校验,供 CI 与开发者本地使用。
+ * 合集自洽性校验,针对一个已经组装好的合集目录(pages 包),供 CI 与开发者本地使用。
+ * 仓库根不是合集目录:仓库级校验用 scripts/verify-catalog.mjs,两条 pages 包校验由 verify-bundle.mjs 合并。
  *
  * 与 build-collection.mjs 共用 lib/collection-verify.mjs 的校验逻辑,只读不写。
  * 校验覆盖:证书链、三层哈希清单(存在性、结构、路径、覆盖范围、SHA-512、清单签名)、
@@ -8,10 +9,10 @@
  * 证书链与 CMS 签名校验需要根证书:用 --root-ca 指定,或设置环境变量 ROOT_CA_PATH。
  *
  * 用法:
- *   node scripts/verify-collection.mjs --dir . --root-ca root_ca.crt
- *   ROOT_CA_PATH=root_ca.crt node scripts/verify-collection.mjs --dir .
+ *   node scripts/verify-collection.mjs --dir dist/pages --root-ca root_ca.crt
+ *   ROOT_CA_PATH=root_ca.crt node scripts/verify-collection.mjs --dir dist/pages
  *   node scripts/verify-collection.mjs --dir template --allow-placeholder-eec
- *   node scripts/verify-collection.mjs --dir . --allow-missing-manifest
+ *   node scripts/verify-collection.mjs --dir dist/pages --allow-missing-manifest
  */
 import { formatProblems, resolveRootCaPath, verifyCollection } from './lib/collection-verify.mjs'
 import { opensslVersion } from './pki.mjs'

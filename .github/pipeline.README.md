@@ -3,7 +3,15 @@
 本仓库负责把 catalog 里登记的插件拉取、重新签名并组装成可直接部署的 Pages 分发包。
 分发模型只有一种来源:插件作者自己发布的 Pages 站点(base_url),Release 不放任何资产。
 
-## 一、证书位置
+## 一、仓库结构
+
+仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录,加上工程文件(`package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.gitignore`、`.gitattributes`、`README.md`、`README.en-US.md`、`LICENSE`)。
+
+合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/` 本身,构建产物落在 `site/dist`。
+
+仓库根不再存放 `datalog.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/`:它们是 pages 包的构建产物,只在构建出的 pages 包里出现,也不再有「空基线」。因此仓库级校验只看 `catalog/` 与 `certs/`(`pnpm verify:catalog`),pages 包的校验用 `pnpm verify:bundle`。
+
+## 二、证书位置
 
 合集终端签名证书(EEC)的固定位置是 `certs/awesome-dsc-plugin-eec.crt`,对应私钥只从 CI secret `EEC_SECRET_KEY` 注入。
 pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `secrets.ROOT_CA_PEM` 或 `vars.ROOT_CA_URL` 提供,只用于自检。
@@ -11,12 +19,13 @@ pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `
 三层清单签名与每个 `plugin.js.sig` 都用同一张 EEC,命令固定为
 `openssl cms -sign -binary -md sha512 -outform DER -nocerts -noattr`,验签必须带 `-inform DER`。
 
-## 二、pages 包结构
+## 三、pages 包结构
 
 | 位置 | 来源 |
 | --- | --- |
 | `index.html`、`assets/` | site 构建产物 |
-| `meta.json`、`tags.json`、`datalog.json` | 由 `scripts/build-from-catalog.mjs` 生成 |
+| `meta.json`、`tags.json` | 取自 `site/meta.json` 与 `site/tags.json`,原样复制 |
+| `datalog.json` | 由 `scripts/build-from-catalog.mjs` 按 catalog 生成 |
 | `manifest.json`、`manifest.json.sig` | L1 清单及其签名 |
 | `catalog/` | main 分支的 catalog 目录复制进来的登记文件,另加构建生成的 `index.json`(汇总索引)与 `anomalies.json`(剔除清单) |
 | `certs/` | main 分支的 certs 目录,原样复制 |
@@ -39,7 +48,7 @@ plugins/<作者>/<插件>/<版本>/plugin.js.sig
 plugins/<作者>/<插件>/<版本>/plugin.js.author.sig   可选,作者自签名原样保留
 ```
 
-## 三、清单覆盖范围
+## 四、清单覆盖范围
 
 | 层 | 目录 | 覆盖文件 |
 | --- | --- | --- |
@@ -50,20 +59,30 @@ plugins/<作者>/<插件>/<版本>/plugin.js.author.sig   可选,作者自签名
 catalog 与 certs 不纳入任何清单,它们是登记信息与信任材料。
 清单格式沿用仓库既有的 `schemaVersion`、`revision`、`files` 三项,哈希算法 SHA-512。
 
-## 四、revision 语义
+## 五、revision 语义
 
 pages 不做版本留存,每个 Release 全量重建并直接替换。
 L1 的 revision 从已发布站点的 `manifest.json` 读取上一次的值:L2、L3 同理由 `plugins/<作者>/manifest.json`、
 `plugins/<作者>/<插件>/manifest.json` 读取。该层文件集合与哈希都没变时沿用旧值,有变化时加一,取不到时从 1 开始。
 
-## 五、本地复现
+## 六、本地复现
 
 ```bash
-# 只做签名与组装,需要设置 EEC_SECRET_KEY 与 ROOT_CA_PATH
+# 仓库级校验:只读 catalog/ 与 certs/,不需要任何构建产物
+pnpm verify:catalog
+
+# 语法自检与站点构建
+pnpm type
+pnpm build:site
+
+# 组装 pages 包:需要 EEC_SECRET_KEY 与 ROOT_CA_PATH
 EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
   node scripts/build-from-catalog.mjs \
   --catalog catalog --certs certs --site site/dist --out dist/pages \
   --published-base https://omdsc-dev.github.io/awesome-dsc-plugin/
+
+# pages 包校验:三层清单、清单签名、产物签名与收录信息交叉一致性
+pnpm verify:bundle --root-ca root_ca.crt
 
 # 独立验签
 openssl cms -verify -binary -md sha512 -inform DER \
@@ -71,10 +90,10 @@ openssl cms -verify -binary -md sha512 -inform DER \
   -CAfile root_ca.crt -certfile dist/pages/certs/awesome-dsc-plugin-eec.crt
 ```
 
-流水线步骤依次为:安装依赖、校验源码树、构建 site、拉取插件、用 EEC 重新签名 `plugin.js`、生成并签名三层清单、
-组装 pages 包、交叉校验收录信息、用 openssl 独立验签、结构自检、上报剔除项、上传并部署。
+流水线步骤依次为:安装依赖、仓库级校验(`verify:catalog`)、构建 site、拉取插件、用 EEC 重新签名 `plugin.js`、生成并签名三层清单、
+组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、上报剔除项、上传并部署。
 
-## 六、异常插件与上报
+## 七、异常插件与上报
 
 构建把两类问题严格分开,边界在 `scripts/build-from-catalog.mjs` 里实现:
 
