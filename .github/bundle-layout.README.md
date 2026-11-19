@@ -8,8 +8,8 @@
 
 `plugins/<author>/`
 
-- 目录名即作者英文名称,必须与 `datalog.json` 的 `author`、`plugins/author_manifest.json` 的 `username` 完全一致。
-- 仅允许小写字母、数字、连字符,不得以连字符开头或结尾,最长 39 字符。
+- 目录名即作者用户名,必须与 `datalog.json` 的 `author`、`plugins/author_manifest.json` 的 `username` 完全一致。
+- 作者名按 GitHub 用户名规则校验,字母不区分大小写:只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符。构建与仓库级校验都按这条规则检查,不合法时报错并指出是哪个目录。
 
 | 文件 | 必需 | 说明 |
 |:---:|:---:|:---:|
@@ -25,7 +25,7 @@
 `plugins/<author>/<plugin>/`
 
 - 目录名取插件 npm 包名去掉命名空间前缀:`dsc-demo` 写作 `dsc-demo`,`@alice/dsc-demo` 同样写作 `dsc-demo`。
-- 插件名必须匹配 `dsc-xxx` 或 `@scope/dsc-xxx`,仅允许小写字母、数字、点、下划线、连字符。
+- 插件名必须以 `dsc-` 为前缀,写成 `dsc-xxx` 或 `@scope/dsc-xxx`,仅允许小写字母、数字、点、下划线、连字符。构建与仓库级校验都按这条规则检查,不带 `dsc-` 前缀的插件名会被拒绝。
 - 目录内必需 `versions.json`:
 
 ```json

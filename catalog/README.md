@@ -16,8 +16,9 @@ catalog/
 ```
 
 - `<作者>` 是目录名,必须与 `author.json` 的 `username` 逐字符一致,也是分发站点里 `plugins/<作者>/` 的目录名。
-- `<插件>` 是目录名,建议与 `plugin.json` 的 `name` 保持一致。
-- 目录与文件名固定,大小写敏感,不要改名。
+- `<作者>` 按 GitHub 用户名规则校验,字母不区分大小写:只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符。不合法时仓库级校验与构建都报错,并指出是哪个目录。
+- `<插件>` 是目录名,必须是 `plugin.json` 的 `name` 去掉 `@scope/` 后的部分:`dsc-demo` 与 `@alice/dsc-demo` 都写作 `dsc-demo`,两者不一致会被拒绝。
+- 目录与文件名固定,不要改名。作者名的合法字符不区分大小写,但 `author.json` 的 `username` 必须与目录名逐字符一致(含大小写),改名时两处要一起改。
 - 结构就是上面这四层,不要创建占位目录、空目录或版本目录:版本不进 catalog,由 CI 从 `base_url` 发现。
 
 ## author.json
@@ -26,7 +27,7 @@ catalog/
 
 | 字段 | 类型 | 说明 |
 |:---:|:---:|:---:|
-| `username` | string | 必填,非空。作者用户名,与所在目录名一致,也是分发站点里 `plugins/<作者>/` 的目录名 |
+| `username` | string | 必填,非空。作者用户名,与所在目录名逐字符一致,也是分发站点里 `plugins/<作者>/` 的目录名;按 GitHub 用户名规则校验,只允许字母、数字与连字符,首尾不得是连字符,长度 1 到 39 |
 | `profile` | string | 必填,非空。作者主页的完整绝对地址,例如 `https://github.com/omdsc-dev`,插件市场用它链接回作者 |
 
 ```json
@@ -59,7 +60,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 
 | 字段 | 类型 | 说明 |
 |:---:|:---:|:---:|
-| `name` | string | 必填,非空。插件名,建议符合 `dsc-xxx` 或 `@scope/dsc-xxx`,并与版本目录里的 `meta.json` 一致 |
+| `name` | string | 必填,非空。插件名,必须以 `dsc-` 为前缀,写成 `dsc-xxx` 或 `@scope/dsc-xxx`,并与版本目录里的 `meta.json` 一致;所在目录名取其去掉 `@scope/` 之后的部分 |
 | `description` | string | 必填,非空。一句话说明插件做什么,用于市场列表展示 |
 | `license` | string | 必填,非空。插件许可证,建议写 SPDX 标识,例如 `Apache-2.0` |
 | `repo_link` | string | 必填,非空。插件源码仓库地址,写完整绝对地址 |

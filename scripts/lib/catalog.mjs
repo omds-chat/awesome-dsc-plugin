@@ -34,6 +34,13 @@ export const DEFAULT_TIMEOUT_MS = 30000
 
 const SEMVER_PATTERN = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/
 const PLUGIN_NAME_PATTERN = /^(?:dsc-[a-z0-9][a-z0-9._-]*|@[a-z0-9][a-z0-9._-]*\/dsc-[a-z0-9][a-z0-9._-]*)$/
+/**
+ * 作者目录名按 GitHub 用户名规则校验:只允许字母、数字与连字符,
+ * 首字符与末字符不能是连字符,长度 1 到 39;字母不区分大小写。
+ */
+export const AUTHOR_NAME_PATTERN = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i
+/** 作者名长度上限,与 GitHub 用户名规则一致 */
+export const AUTHOR_NAME_MAX_LENGTH = 39
 const PLUGIN_FIELDS = ['name', 'description', 'license', 'repo_link', 'base_url']
 /** plugin.json 的可选字段:省略等价于空数组 */
 const PLUGIN_OPTIONAL_FIELDS = ['tags']
@@ -54,6 +61,23 @@ function isFile(path) {
   } catch {
     return false
   }
+}
+
+/**
+ * 说明作者名违反 GitHub 用户名规则的具体原因,供报错信息使用。
+ * @param {string} name 目录名或 author.json 的 username
+ * @returns {string|null} 违规原因;合法时返回 null
+ */
+export function describeAuthorNameProblem(name) {
+  if (typeof name !== 'string' || name.length === 0) return '为空'
+  if (name.length > AUTHOR_NAME_MAX_LENGTH) {
+    return '长度为 ' + name.length + ' 字符,超过 ' + AUTHOR_NAME_MAX_LENGTH + ' 字符上限'
+  }
+  if (AUTHOR_NAME_PATTERN.test(name)) return null
+  if (name.startsWith('-')) return '以连字符开头'
+  if (name.endsWith('-')) return '以连字符结尾'
+  const bad = [...name].find((char) => !/[a-z\d-]/i.test(char))
+  return bad === undefined ? '不符合 GitHub 用户名规则' : '含字符 ' + JSON.stringify(bad) + ',只允许字母、数字与连字符'
 }
 
 /** 按 x.y.z 比较两个版本号,返回负数表示 a 小于 b。 */
@@ -125,9 +149,10 @@ function readPluginTags(data, label, problems) {
  * @param {object} context 上下文
  * @param {string} context.catalogDir catalog 根目录
  * @param {Array<object>} context.problems 问题收集数组
+ * @param {boolean} [context.checkAuthorNames] 是否就地校验作者目录名;调用方另行报同一条错误时传 false
  * @returns {{authors: Array<object>, plugins: Array<object>}}
  */
-export function readCatalog({ catalogDir, problems }) {
+export function readCatalog({ catalogDir, problems, checkAuthorNames = true }) {
   const authors = []
   const plugins = []
   if (!isDirectory(catalogDir)) {
@@ -146,6 +171,17 @@ export function readCatalog({ catalogDir, problems }) {
     const username = entry.name
     const authorDir = join(catalogDir, username)
     const authorRel = 'catalog/' + username
+    if (checkAuthorNames && !AUTHOR_NAME_PATTERN.test(username)) {
+      problems.push(
+        problem(
+          'error',
+          'AUTHOR_NAME_INVALID',
+          authorRel + ' 的目录名 ' + JSON.stringify(username) + ' 不是合法作者名:' + describeAuthorNameProblem(username) +
+            ';作者名按 GitHub 用户名规则校验,只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符',
+          authorRel,
+        ),
+      )
+    }
     const authorPath = join(authorDir, AUTHOR_FILE)
     let profile = null
     if (!isFile(authorPath)) {
@@ -226,7 +262,14 @@ export function readCatalog({ catalogDir, problems }) {
       }
       if (!valid) continue
       if (!PLUGIN_NAME_PATTERN.test(data.name)) {
-        problems.push(problem('error', 'PLUGIN_NAME_INVALID', pluginRel + '/' + PLUGIN_FILE + ' 的 name 不是合法插件名:' + JSON.stringify(data.name), pluginRel + '/' + PLUGIN_FILE))
+        problems.push(
+          problem(
+            'error',
+            'PLUGIN_NAME_INVALID',
+            pluginRel + '/' + PLUGIN_FILE + ' 的 name ' + JSON.stringify(data.name) + ' 不是合法插件名:必须以 dsc- 为前缀,写成 dsc-xxx 或 @scope/dsc-xxx,仅允许小写字母、数字、点、下划线、连字符',
+            pluginRel + '/' + PLUGIN_FILE,
+          ),
+        )
         continue
       }
       const expectedDir = data.name.split('/').pop()

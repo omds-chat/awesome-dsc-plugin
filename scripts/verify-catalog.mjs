@@ -35,6 +35,10 @@ const REMOVED_FILE = 'removed.json'
 const SECRET_PUB_FILE = 'awesome-dsc-plugin-secret.pub'
 /** 插件名合法形式:与 lib/catalog.mjs 保持一致 */
 const PLUGIN_NAME_PATTERN = /^(?:dsc-[a-z0-9][a-z0-9._-]*|@[a-z0-9][a-z0-9._-]*\/dsc-[a-z0-9][a-z0-9._-]*)$/
+/** 作者目录名合法形式:GitHub 用户名规则,与 lib/catalog.mjs 保持一致,字母不区分大小写 */
+const AUTHOR_NAME_PATTERN = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i
+/** 作者名长度上限 */
+const AUTHOR_NAME_MAX_LENGTH = 39
 /** removed.json 每条记录必填字段,与 schemas/catalog-removed.schema.json 一致 */
 const REMOVED_REQUIRED_FIELDS = ['name', 'base_url', 'removed_in']
 /** removed.json 的可选字段 */
@@ -107,6 +111,43 @@ function isFile(path) {
   } catch {
     return false
   }
+}
+
+/** 说明作者目录名违反 GitHub 用户名规则的具体原因。 */
+function describeAuthorNameViolation(name) {
+  if (name.length > AUTHOR_NAME_MAX_LENGTH) {
+    return '长度为 ' + name.length + ' 字符,超过 ' + AUTHOR_NAME_MAX_LENGTH + ' 字符上限'
+  }
+  if (name.startsWith('-')) return '以连字符开头'
+  if (name.endsWith('-')) return '以连字符结尾'
+  const bad = [...name].find((char) => !/[a-z\d-]/i.test(char))
+  return bad === undefined ? '不符合 GitHub 用户名规则' : '含字符 ' + JSON.stringify(bad) + ',只允许字母、数字与连字符'
+}
+
+/**
+ * 校验 catalog/ 下的作者目录名:必须符合 GitHub 用户名规则。
+ * 目录名同时是 author.json 的 username 与 pages 包里 plugins/<作者>/ 的目录名,
+ * 名字不合法会同时污染登记与分发路径,所以按错误处理。
+ */
+function checkAuthorNames({ catalogDir, problems }) {
+  if (!isDirectory(catalogDir)) return 0
+  const entries = readdirSync(catalogDir, { withFileTypes: true }).sort((left, right) => (left.name < right.name ? -1 : 1))
+  let invalid = 0
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    if (AUTHOR_NAME_PATTERN.test(entry.name)) continue
+    invalid += 1
+    problems.push(
+      problem(
+        'error',
+        'AUTHOR_NAME_INVALID',
+        'catalog/' + entry.name + ' 的目录名 ' + JSON.stringify(entry.name) + ' 不是合法作者名:' + describeAuthorNameViolation(entry.name) +
+          ';作者名按 GitHub 用户名规则校验,只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符',
+        'catalog/' + entry.name,
+      ),
+    )
+  }
+  return invalid
 }
 
 function readJson(path, label, problems) {
@@ -351,7 +392,9 @@ function main() {
 
   const problems = []
   const presetTags = readPresetTags(tagsPath, problems)
-  const catalog = readCatalog({ catalogDir, problems })
+  // 作者目录名由本脚本的 checkAuthorNames 报,读 catalog 时关掉同一条检查,避免一个问题报两遍
+  const catalog = readCatalog({ catalogDir, problems, checkAuthorNames: false })
+  const invalidAuthorNames = checkAuthorNames({ catalogDir, problems })
   checkPresetTags({ plugins: catalog.plugins, presetTags, problems })
   const removedCount = checkRemoved({ catalogDir, plugins: catalog.plugins, problems })
   const leftovers = checkPluginDirectories(catalog.plugins, problems)
@@ -370,6 +413,7 @@ function main() {
           tagsPath,
           rootCaPath,
           authors: catalog.authors.length,
+          invalidAuthorNames,
           plugins: catalog.plugins.length,
           removed: removedCount,
           versionDirWarnings: leftovers,

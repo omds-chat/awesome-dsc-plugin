@@ -8,7 +8,9 @@
     "username": {
       "type": "string",
       "minLength": 1,
-      "description": "作者用户名,必须与所在目录名 catalog/<作者>/ 逐字符一致。"
+      "maxLength": 39,
+      "pattern": "^[a-zA-Z\\d](?:[a-zA-Z\\d]|-(?=[a-zA-Z\\d])){0,38}$",
+      "description": "作者用户名,必须与所在目录名 catalog/<作者>/ 逐字符一致,且符合 GitHub 用户名规则:只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39,字母不区分大小写。"
     },
     "profile": {
       "type": "string",

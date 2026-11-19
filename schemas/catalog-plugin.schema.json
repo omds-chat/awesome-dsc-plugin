@@ -8,7 +8,8 @@
     "name": {
       "type": "string",
       "minLength": 1,
-      "description": "插件名,建议符合 dsc-xxx 或 @scope/dsc-xxx,并与版本目录里 meta.json 的 name 一致。"
+      "pattern": "^(?:dsc-[a-z0-9][a-z0-9._-]*|@[a-z0-9][a-z0-9._-]*/dsc-[a-z0-9][a-z0-9._-]*)$",
+      "description": "插件名,必须以 dsc- 为前缀,写成 dsc-xxx 或 @scope/dsc-xxx,仅允许小写字母、数字、点、下划线、连字符,并与版本目录里 meta.json 的 name 一致;所在目录名取去掉 @scope/ 之后的部分。"
     },
     "description": {
       "type": "string",
