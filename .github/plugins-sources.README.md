@@ -44,13 +44,12 @@
 1. 把 `repo` 克隆或复制到 `temp/import/`。
 2. 在该目录执行 `pnpm install --frozen-lockfile` 与 `pnpm build`。
 3. 读取 `dist/meta.json` 取得版本号并确认 `name` 与清单的 `plugin` 一致,把 `dist/meta.json`、`dist/plugin.js` 复制到 `plugins/<author>/<plugin>/<version>/`。
-4. 若 `dist/` 内存在作者侧分离签名,按下面的对应关系一并复制,保留作者签名:
-   `dist/plugin.js.sig` 落为 `plugin.js.author.sig`,`dist/meta.json.sig` 落为 `meta.json.author.sig`。
+4. 若 `dist/` 内存在作者侧分离签名,一并复制并保留作者签名:`dist/plugin.js.sig` 落为 `plugin.js.author.sig`。`dist/meta.json.sig` 不再收录:`meta.json.sig` 与 `meta.json.author.sig` 已取消,`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定。
 5. 若 `dist/` 内存在 `author_pub.pem`,复制为 `plugins/<author>/author_pub.pem`。
 6. 更新该插件的 `versions.json`、该作者的 `plugin_manifest.json`、根目录 `datalog.json`。
 7. 删除 `temp/import/` 内的临时目录。
 
-收录本身不生成合集签名。合集 CMS 签名(`plugin.js.sig` 与 `meta.json.sig`)由 `scripts/build-collection.mjs --sign` 用本仓库 EEC 统一生成。
+收录本身不生成合集签名。每个版本的 `plugin.js.sig` 与三层 `manifest.json.sig`(L1 合集根、L2 作者目录、L3 插件目录)由 `scripts/build-collection.mjs --sign` 用本仓库 EEC 统一生成。三层 `manifest.json` 与 `manifest.json.sig` 必须随源码提交入库,`revision` 从该层上一份清单读出,不入库就会在每次全新 checkout 时退回 1。
 
 任何一步失败,该插件被跳过并在日志中写明原因,其余插件照常处理,流程退出码保持 0。
 

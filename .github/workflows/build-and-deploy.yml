@@ -7,6 +7,7 @@ on:
     paths:
       - 'plugins/**'
       - 'scripts/**'
+      - 'schemas/**'
       - '.github/**'
       - 'meta.json'
       - 'eec.pem'
@@ -15,7 +16,7 @@ on:
       - published
   workflow_dispatch:
 
-# 需要写权限,因为分发内容会被提交回仓库;Pages 与 OIDC 令牌供发布步骤使用。
+# 需要写权限,因为分发内容(含三层清单与清单签名)会被提交回仓库;Pages 与 OIDC 令牌供发布步骤使用。
 permissions:
   contents: write
   pages: write
@@ -27,8 +28,8 @@ concurrency:
 
 # 本仓库是终端签名方(EEC)。私钥只有两个来源:
 #   secrets.EEC_SECRET_KEY  终端签名证书私钥(ECDSA P-256),只在本流程内存中出现;
-#   secrets.ROOT_CA_PEM     根证书 PEM,用于校验证书链,不是私钥。
-# 根证书私钥属于 dsce 仓库的离线环境,绝不出现在本流程。
+#   secrets.ROOT_CA_PEM     根证书 PEM,用于校验证书链与清单签名,不是私钥。
+# 根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,绝不出现在本流程。
 env:
   EEC_SECRET_KEY: ${{ secrets.EEC_SECRET_KEY }}
   ROOT_CA_PEM: ${{ secrets.ROOT_CA_PEM }}
@@ -95,21 +96,48 @@ jobs:
           openssl x509 -in eec.pem -noout -ext basicConstraints
           openssl x509 -in eec.pem -noout -checkend 0
 
-      # 用 EEC 私钥为每个版本的 meta.json 与 plugin.js 生成 CMS 分离签名,并生成 dist/。
-      # 私钥只从 secret 注入,且必须与仓库内的 eec.pem 配对,否则步骤直接失败。
-      - name: Build distribution
+      # 用 EEC 私钥为每个版本的 plugin.js 与三层清单(L1 合集根、L2 作者目录、L3 插件目录)
+      # 生成 CMS 分离签名,并生成 dist/。私钥只从 secret 注入,且必须与仓库内的 eec.pem 配对,
+      # 否则步骤直接失败。清单与签名同时写回源码树,供后续步骤提交入库。
+      - name: Build and sign distribution
         run: node scripts/build-collection.mjs --dir . --root-ca "$ROOT_CA_PATH" --sign --out dist
 
-      # 对即将分发的产物再做一次完整校验: 证书链、CMS 签名、作者签名、清单与版本目录。
+      # 发布前的自检:用根证书独立验签 dist/ 内每一层的 manifest.json.sig,
+      # 不经过 Node 脚本,直接确认 openssl 能验过,避免脚本与 openssl 语义分叉。
+      - name: Verify manifest signatures with root CA
+        run: |
+          set -euo pipefail
+          count=0
+          while IFS= read -r manifest; do
+            sig="$manifest.sig"
+            if [ ! -f "$sig" ]; then
+              echo "::error::缺少清单签名 $sig"
+              exit 1
+            fi
+            openssl cms -verify -binary -md sha512 -inform DER \
+              -in "$sig" -content "$manifest" \
+              -CAfile "$ROOT_CA_PATH" -certfile dist/eec.pem > /dev/null
+            echo "清单签名通过: $manifest"
+            count=$((count + 1))
+          done < <(find dist -type f -name manifest.json | sort)
+          if [ "$count" -lt 1 ]; then
+            echo "::error::dist 内没有任何三层清单"
+            exit 1
+          fi
+          echo "已验签 $count 层清单"
+
+      # 对即将分发的产物再做一次完整校验: 证书链、三层清单的结构与哈希、
+      # 清单签名、CMS 签名、作者签名与版本目录。
       - name: Verify distribution
         run: node scripts/verify-collection.mjs --dir dist --root-ca "$ROOT_CA_PATH"
 
-      # 把构建结果提交回仓库,让开发者本地也能拿到最新的分发内容与签名。
+      # 把构建结果提交回仓库,让开发者本地也能拿到最新的分发内容、三层清单与清单签名。
+      # manifest.json 与 manifest.json.sig 必须入库,否则 revision 会在每次全新 checkout 时退回 1。
       - name: Commit distribution changes
         run: |
           git config user.name 'github-actions'
           git config user.email 'github-actions@github.com'
-          git add plugins datalog.json
+          git add plugins datalog.json meta.json tags.json manifest.json manifest.json.sig
           if git diff --cached --quiet; then
             echo 'distribution content unchanged'
             exit 0
