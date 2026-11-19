@@ -49,7 +49,7 @@
 | `plugin.js.sig` | 是 | 本仓库 EEC | `plugin.js` 的 CMS 分离签名,由 CI 的 `build-from-catalog.mjs` 重新生成 |
 | `plugin.js.author.sig` | 否 | 插件作者 | `plugin.js` 的裸公钥分离签名,随插件产物提供,存在时用 `plugins/<author>/author_pub.pem` 校验 |
 
-`meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖,`dsc-plugin-template` 仓库仍在产出 `meta.json.author.sig`,待同步。
+`meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖;若作者沿用 `dsc-plugin-template` 的产物,该模板会一并产出 `meta.json.author.sig`,本仓库不收录这个文件。
 
 CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范化。任何一字节差异(包括 LF 与 CRLF 的差别)都会让校验失败。
 

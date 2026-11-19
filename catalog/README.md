@@ -146,6 +146,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 - 下架某个插件:删除 `catalog/<作者>/<插件>/` 整个目录,并在 [removed.json](removed.json) 追加一条记录,然后提交 PR。
 - 整体退出:删除 `catalog/<作者>/` 整个目录,作者名下每个插件都要在 `removed.json` 各留一条记录,然后提交 PR。
 - 直接删干净,不要留空目录或 TODO 文件占位;下次 Release 重建 pages 后,被删除的条目从分发内容里消失。
+- `removed.json` 必须存在:没有任何记录时保持空数组 `[]`,缺少该文件仓库级校验会报错。
 - `removed.json` 是顶层数组,每条记录的字段:
 
 | 字段 | 类型 | 说明 |

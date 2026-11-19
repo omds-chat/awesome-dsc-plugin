@@ -31,7 +31,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 ├── datalog.json                       # L1,插件目录,由 catalog 生成
 ├── manifest.json                      # L1 清单
 ├── manifest.json.sig                  # L1 清单签名
-├── catalog/                           # 收录登记复制,另含构建生成的 index.json 与 anomalies.json,不进任何清单
+├── catalog/                           # 收录登记复制(含 removed.json),另含构建生成的 index.json 与 anomalies.json,不进任何清单
 ├── certs/                             # 信任材料,原样复制,不进任何清单
 │   └── awesome-dsc-plugin-eec.crt     # 合集终端签名证书(EEC),由根 CA 签发
 └── plugins/
@@ -81,7 +81,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 - `revision` 是每层独立的正整数:该层文件集合或内容变化时加一,不变时沿用旧值;pages 包每次全量重建,上一份值按层从已发布站点的同名 `manifest.json` 读取,取不到时从 1 开始。
 - L3 不覆盖 `plugin.js` 与 `plugin.js.sig`:产物本体由每个版本的 `plugin.js.sig` 独立签名,清单只描述元数据。
 - `tags.json` 可选:存在就必须被 L1 清单覆盖,不存在则不报错、也不进清单。
-- `meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`,`plugin.js.author.sig` 可选保留。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖。`dsc-plugin-template` 仓库仍在产出 `meta.json.author.sig`,待同步。
+- `meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`,`plugin.js.author.sig` 可选保留。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖。若作者沿用 `dsc-plugin-template` 的产物,该模板会一并产出 `meta.json.author.sig`,本仓库不收录这个文件。
 
 三层之间不做收束:L1 不引用 L2,L2 不引用 L3,任何一层都可以单独发布、单独校验、单独重签。取舍是放弃「一次校验拿到全树摘要」,换取按插件增量更新:改一个插件只需 L3 的 `revision` 加一,L2 与 L1 的 `revision` 不变,客户端也只重新拉取这一层的清单与签名。若把三层收束成一份根清单,任何插件发版都会改动根清单,所有客户端都得重拉整份摘要。
 
@@ -293,7 +293,7 @@ awesome-dsc-plugin/
 
 1. 提交 PR,在 `catalog/` 登记插件:`catalog/<作者>/author.json`、`catalog/<作者>/author_pub.pem`、`catalog/<作者>/<插件>/plugin.json`。字段、schema 与提交校验见 [catalog/README.md](catalog/README.md)。
 2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。
-3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,`datalog.json` 与 `catalog/index.json` 由 catalog 生成,`catalog/` 与 `certs/` 复制进来,再按层生成并签名 L1、L2、L3 三层清单。
+3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,`datalog.json` 由 catalog 生成,`catalog/`(含 `removed.json`,本次剔除的作者与插件不在其中)与 `certs/` 复制进来,再在 `catalog/` 下写入 `index.json` 与 `anomalies.json`,并按层生成、签名 L1、L2、L3 三层清单。
 4. 交叉校验:`scripts/verify-catalog-consistency.mjs` 比对 `catalog/index.json`、`datalog.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止并列出差异。
 5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,全部通过后整体替换已发布站点,不做版本留存。
 

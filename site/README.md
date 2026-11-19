@@ -11,7 +11,7 @@
 | `meta.json` | 合集元数据,含下载计数开关 | 由 `scripts/build-from-catalog.mjs` 原样复制到 pages 包根目录 |
 | `tags.json` | 预设标签清单,收录登记里的标签只能取自这里 | 同上 |
 
-仓库根不再存放这两个文件,也不放任何分发包索引文件。站点自身的构建产物只有 `index.html` 与 `assets/`,不含上述设置。
+仓库根不再存放这两个文件,也不放任何分发包索引文件。站点自身的构建产物只有 `index.html`、`.nojekyll` 与 `assets/`,不含上述设置。
 
 ## 数据来源
 
@@ -43,14 +43,17 @@
 - 404 记为「缺失」,网络失败或非 2xx 记为「未探测」,两者在界面上区分显示。
 - 界面措辞只写「存在」「缺失」「未探测」,并注明未做密码学计算,不代表已验签。
 
-`catalog/index.json` 是可选加速项,当前流水线不产出该文件,页面会自动走第 2 步。若后续由流水线生成,结构为:
+`catalog/index.json` 由 `scripts/build-from-catalog.mjs` 在每次构建时生成,按本次实际收录范围列出作者与插件,结构以 [catalog-index.schema.json](../schemas/catalog-index.schema.json) 为准。
 
 ```json
 {
+  "schemaVersion": 1,
+  "collection": { "name": "awesome-dsc-plugin", "release": "v2.0.0" },
   "authors": [
     {
       "username": "omdsc-dev",
       "profile": "https://github.com/omdsc-dev",
+      "plugin_count": 1,
       "plugins": [
         {
           "name": "dsc-demo",
@@ -61,9 +64,24 @@
         }
       ]
     }
+  ],
+  "plugins": [
+    {
+      "author": "omdsc-dev",
+      "name": "dsc-demo",
+      "description": "一句话说明",
+      "license": "Apache-2.0",
+      "repo_link": "https://github.com/omdsc-dev/dsc-demo",
+      "base_url": "https://omdsc-dev.github.io/dsc-demo/",
+      "current_version": "1.0.0",
+      "tags": ["ui-enhance"],
+      "version_count": 1
+    }
   ]
 }
 ```
+
+页面把它当可选加速项:读得到就用第 1 步,读不到自动回落到第 2 步。
 
 ## 构建
 
@@ -99,7 +117,7 @@ site/dist/
     └── styles.css  样式
 ```
 
-流水线读取 `vars.SITE_DIR`,默认 `site/dist`,把 `index.html` 与 `assets/` 复制进 pages 包根目录。产物是纯静态文件,不需要服务端,也没有任何运行时依赖。
+流水线读取 `vars.SITE_DIR`,默认 `site/dist`,把该目录整体复制进 pages 包根目录;`plugins/`、`catalog/`、`certs/`、`meta.json`、`tags.json`、`datalog.json`、清单与 `eec.pem` 这些顶层名字由流水线独占,站点产物不得占用。产物是纯静态文件,不需要服务端,也没有任何运行时依赖。
 
 ## 约定
 

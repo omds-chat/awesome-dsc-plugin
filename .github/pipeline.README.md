@@ -5,7 +5,7 @@
 
 ## 一、仓库结构
 
-仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录,加上工程文件(`package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.gitignore`、`.gitattributes`、`README.md`、`README.en-US.md`、`LICENSE`)。
+仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与 `.github/`,加上工程文件(`package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.gitignore`、`.gitattributes`、`README.md`、`README.en-US.md`、`LICENSE`)。
 
 合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/` 本身,构建产物落在 `site/dist`。
 
@@ -22,12 +22,12 @@ pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `
 ## 三、pages 包结构
 
 | 位置 | 来源 |
-| --- | --- |
+|:---:|:---:|
 | `index.html`、`assets/` | site 构建产物 |
 | `meta.json`、`tags.json` | 取自 `site/meta.json` 与 `site/tags.json`,原样复制 |
 | `datalog.json` | 由 `scripts/build-from-catalog.mjs` 按 catalog 生成 |
 | `manifest.json`、`manifest.json.sig` | L1 清单及其签名 |
-| `catalog/` | main 分支的 catalog 目录复制进来的登记文件,另加构建生成的 `index.json`(汇总索引)与 `anomalies.json`(剔除清单) |
+| `catalog/` | main 分支的 catalog 目录复制进来的登记文件,含根目录的 `README.md` 与 `removed.json`,本次剔除的作者与插件不复制;另加构建生成的 `index.json`(汇总索引)与 `anomalies.json`(剔除清单) |
 | `certs/` | main 分支的 certs 目录,原样复制 |
 | `plugins/` | 由 CI 依据 catalog 拉取并构建 |
 
@@ -51,7 +51,7 @@ plugins/<作者>/<插件>/<版本>/plugin.js.author.sig   可选,作者自签名
 ## 四、清单覆盖范围
 
 | 层 | 目录 | 覆盖文件 |
-| --- | --- | --- |
+|:---:|:---:|:---:|
 | L1 | pages 根 | `meta.json`、`datalog.json`、`tags.json`、`plugins/author_manifest.json` |
 | L2 | `plugins/<作者>` | `author_pub.pem`、`plugin_manifest.json` |
 | L3 | `plugins/<作者>/<插件>` | `versions.json` 与各版本的 `meta.json` |

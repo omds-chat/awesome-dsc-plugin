@@ -31,7 +31,7 @@ The collection is published as a pages bundle: on every Release CI pulls the plu
 ├── datalog.json                       # L1, plugin catalog generated from catalog/
 ├── manifest.json                      # L1 manifest
 ├── manifest.json.sig                  # L1 manifest signature
-├── catalog/                           # registrations copied over, plus the generated index.json and anomalies.json; covered by no manifest
+├── catalog/                           # registrations copied over (removed.json included), plus the generated index.json and anomalies.json; covered by no manifest
 ├── certs/                             # trust material, copied verbatim, covered by no manifest
 │   └── awesome-dsc-plugin-eec.crt     # collection end-entity signing certificate, issued by the root CA
 └── plugins/
@@ -81,7 +81,7 @@ Manifest format, with the JSON Schema in `schemas/manifest.schema.json`:
 - `revision` is a positive integer per layer: it increments when the layer's file set or contents change and keeps its value when nothing changed; the bundle is rebuilt from scratch on every Release, so the previous value is read per layer from the published site's `manifest.json` at the same path, starting at 1 when it cannot be read.
 - L3 does not cover `plugin.js` or `plugin.js.sig`: the artifact itself is signed per version by `plugin.js.sig` and the manifest describes metadata only.
 - `tags.json` is optional: when it exists it must be covered by the L1 manifest, and when it does not exist it is neither required nor listed.
-- `meta.json.sig` and `meta.json.author.sig` are gone: the only collection signature inside a version directory is `plugin.js.sig`, and `plugin.js.author.sig` stays optional. `meta.json` is covered by the L3 manifest and bound by the collection EEC, while the author public key itself is covered by L2. The `dsc-plugin-template` repository still emits `meta.json.author.sig` and has to be synced.
+- `meta.json.sig` and `meta.json.author.sig` are gone: the only collection signature inside a version directory is `plugin.js.sig`, and `plugin.js.author.sig` stays optional. `meta.json` is covered by the L3 manifest and bound by the collection EEC, while the author public key itself is covered by L2. When an author keeps the output of `dsc-plugin-template`, that template also emits `meta.json.author.sig`; this repository does not carry the file.
 
 The three layers are deliberately not folded together: L1 does not reference L2 and L2 does not reference L3, so each layer can be published, verified and re-signed on its own. The trade-off gives up "one check yields a digest of the whole tree" in exchange for per-plugin incremental updates: changing one plugin only increments the L3 `revision`, leaves L2 and L1 untouched, and clients refetch just that layer. Folding the layers into a single root manifest would make every plugin release rewrite the root manifest and force every client to refetch the whole digest.
 
@@ -293,7 +293,7 @@ This collection does not enable download counting.
 
 1. Open a PR that registers the plugin in `catalog/`: `catalog/<author>/author.json`, `catalog/<author>/author_pub.pem` and `catalog/<author>/<plugin>/plugin.json`. Fields, schemas and the submission checks are documented in [catalog/README.md](catalog/README.md).
 2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC.
-3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from `site/`, `datalog.json` and `catalog/index.json` are generated from `catalog/`, `catalog/` and `certs/` are copied over, and the L1, L2 and L3 manifests are generated and signed layer by layer.
+3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from `site/`, `datalog.json` is generated from `catalog/`, `catalog/` (with `removed.json`, minus the authors and plugins excluded from this release) and `certs/` are copied over, `catalog/index.json` and `catalog/anomalies.json` are then written, and the L1, L2 and L3 manifests are generated and signed layer by layer.
 4. It cross-checks the result: `scripts/verify-catalog-consistency.mjs` compares `catalog/index.json`, `datalog.json`, `plugins/author_manifest.json`, the `catalog/` copy and the `plugins/` tree, and aborts with a non-zero exit code listing every difference.
 5. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes replaces the published site wholesale, keeping no versions.
 
