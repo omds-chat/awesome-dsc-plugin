@@ -18,3 +18,4 @@
 - 三份 catalog schema 中,`catalog-author`、`catalog-plugin` 与 `catalog-removed` 约束仓库内的登记文件,字段语义与提交流程见 [catalog/README.md](../catalog/README.md)。
 - `catalog-index.schema.json` 约束构建产出的 `catalog/index.json`,该文件由 `scripts/build-from-catalog.mjs` 生成,不入库。
 - 结构合法不等于收录通过:公钥格式、标签是否属于预设清单、`base_url` 可达性、版本发现与重新签名都在结构校验之外。
+- 本目录的 schema 是本仓库自用的实例副本,不与模板仓库 `awesome-dsc-plugin-set-template` 下的同名文件逐字一致:`$id` 指向各自的站点,且本仓库另有 catalog 层的 schema 是模板里没有的。两边若同时改动同一条规则,以模板仓库为规范来源,本仓库跟随。
