@@ -97,12 +97,14 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 
 合并 PR 后,CI 构建 pages 包时:
 
-1. 用 [catalog-author.schema.json](../schemas/catalog-author.schema.json) 与 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 校验登记文件,并检查公钥格式;不合规的条目跳过并在日志里写明原因。
+1. 用 [catalog-author.schema.json](../schemas/catalog-author.schema.json) 与 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 校验登记文件,并检查公钥格式;不合规的条目直接报错,整个构建以非零退出码中止,不会跳过该条目继续发布其余内容。
 2. 到 `base_url` 拉取该插件的全部版本与产物。
 3. 用合集 EEC 给每个版本的 `plugin.js` 重新签名,产出 `plugin.js.sig`;作者的 `plugin.js.author.sig` 原样保留。
 4. 把公钥、版本列表、各版本元数据写入 pages 包的 `plugins/` 目录,把 `catalog` 与 `certs` 原样复制进 pages,再生成 L1、L2、L3 三层清单与清单签名。
 5. 每次 Release 全量重建 pages 并直接替换,不做版本留存;L1 的 `revision` 从已发布站点的 `manifest.json` 读上一次的值加一,取不到时从 1 开始。
 6. `catalog` 与 `certs` 随 pages 分发,但不进任何一层清单,它们是登记信息与信任材料。
+
+`datalog.json` 的 `tag` 当前恒为空数组:标签暂不生效,`plugin.json` 没有标签字段,`tags.json` 只作为预设标签清单随包分发。
 
 插件市场按 pages 包的路径取用插件,作者不需要为分发再做别的准备。
 

@@ -54,6 +54,8 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 根目录不再有 `eec.pem`:合集证书的固定位置是 `certs/awesome-dsc-plugin-eec.crt`,随 pages 包分发,不进任何清单;根证书同样不进分发内容。
 
+仓库内的 `meta.json` 与 `tags.json` 是 pages 包对应文件的来源,内容原样进入 pages 包;`datalog.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/author_manifest.json` 入库的只是空基线,内容与 pages 包内的同名文件并不相同,真实内容由构建写出。
+
 | 层 | 位置 | 覆盖的文件(相对该层目录) |
 |:---:|:---:|:---:|
 | L1 | pages 包根 | `meta.json`、`datalog.json`、`tags.json`、`plugins/author_manifest.json`,其中 `tags.json` 存在时覆盖 |
@@ -83,7 +85,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 三层之间不做收束:L1 不引用 L2,L2 不引用 L3,任何一层都可以单独发布、单独校验、单独重签。取舍是放弃「一次校验拿到全树摘要」,换取按插件增量更新:改一个插件只需 L3 的 `revision` 加一,L2 与 L1 的 `revision` 不变,客户端也只重新拉取这一层的清单与签名。若把三层收束成一份根清单,任何插件发版都会改动根清单,所有客户端都得重拉整份摘要。
 
-pages 包是构建产物,不提交回仓库:每次 Release 全量重建并整体替换,仓库里不保留 `datalog.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig` 的历史版本。因此每层的 `revision` 不能在源码树里沿用,只能按层从已发布站点的同名 `manifest.json` 读取:文件集合与哈希都没变时沿用旧值,有变化时加一。
+pages 包是构建产物,不提交回仓库:每次 Release 全量重建并整体替换,仓库里不保留 `datalog.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig` 的历史版本,只留一份空基线让仓库级校验能读到必需文件。因此每层的 `revision` 不能在源码树里沿用,只能按层从已发布站点的同名 `manifest.json` 读取:文件集合与哈希都没变时沿用旧值,有变化时加一。
 
 ## 必需文件
 
@@ -232,6 +234,9 @@ awesome-dsc-plugin/
 ├── README.en-US.md
 ├── meta.json                           合集元数据,含下载计数开关,是 pages 包 meta.json 的来源
 ├── tags.json                           预设标签,是 pages 包 tags.json 的来源
+├── datalog.json                        空基线,真实内容由构建产出于 pages 包
+├── manifest.json                       空基线,真实内容由构建产出于 pages 包
+├── manifest.json.sig                   空基线,真实内容由构建产出于 pages 包
 ├── package.json
 ├── pnpm-lock.yaml
 ├── pnpm-workspace.yaml
@@ -256,7 +261,9 @@ awesome-dsc-plugin/
 │   ├── package.json
 │   └── src/                            站点源码:index.html 与 assets/
 ├── plugins/
-│   └── README.md                       插件树说明;插件数据本身是构建产物,不入库
+│   ├── author_manifest.json            空基线,真实内容由构建产出于 pages 包
+│   ├── README.md                       插件树说明
+│   └── <作者>/                          构建产物,不入库:作者、插件与版本数据由 CI 生成
 └── scripts/
     ├── pki.mjs                         OpenSSL PKI 封装,只调用命令行不做密码学
     ├── lib/collection-verify.mjs       两个脚本共用的校验逻辑
@@ -268,7 +275,7 @@ awesome-dsc-plugin/
     └── import-plugins.mjs              按旧来源清单构建并收录插件
 ```
 
-`datalog.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig` 已改为 pages 包的构建产物,不再提交:发布时由 CI 生成到 `dist/pages/`,插件数据由 `catalog/` 与各作者的 `base_url` 汇总而来。`dist/`、`site/dist/` 与 `temp/` 同样是生成目录,不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
+`datalog.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/author_manifest.json` 入库的只是空基线:让仓库级校验(`pnpm verify`)能读到必需文件,也给构建一个明确的落点。真实内容由 CI 在 Release 时写进 pages 包,`plugins/<作者>/` 下的作者、插件与版本数据只存在于 pages 包,不入库。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
 
 ## 合集元数据
 
@@ -290,6 +297,8 @@ awesome-dsc-plugin/
 4. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,全部通过后整体替换已发布站点,不做版本留存。
 
 任何一步失败都以非零退出码中止,不发布半成品:登记不合规、拉取失败、签名失败或自检失败都会让整个构建停下。
+
+`datalog.json` 的 `tag` 当前恒为空数组:标签暂不生效,`catalog/` 里的 `plugin.json` 没有标签字段,`tags.json` 只作为预设标签清单随包分发。
 
 ## 如何收录插件
 

@@ -16,7 +16,7 @@
 | `manifest.json` | 是 | L2 清单,覆盖本目录的 `author_pub.pem` 与 `plugin_manifest.json`,文件存在才覆盖 |
 | `manifest.json.sig` | 是 | L2 清单的 CMS 分离签名,由 EEC 生成 |
 
-作者公钥由插件构建产物 `dist/author_pub.pem` 随收录流程复制进来,不要在合集里手工生成。缺失时校验只给警告,该作者的插件便不能带作者签名。
+作者公钥由插件作者提供,登记在 `catalog/<作者>/author_pub.pem`,构建时复制到 pages 包的 `plugins/<作者>/author_pub.pem`。不要在合集里手工生成。缺失时校验只给警告,该作者的插件便不能带作者签名。
 
 ## 插件目录
 
@@ -44,7 +44,7 @@
 |:---:|:---:|:---:|:---:|
 | `meta.json` | 是 | 无 | 插件运行时元数据,由 L3 清单覆盖,不再单独签名 |
 | `plugin.js` | 是 | 无 | 插件运行时脚本,单文件 ESM,使用 LF 换行 |
-| `plugin.js.sig` | 是 | 本仓库 EEC | `plugin.js` 的 CMS 分离签名,由 CI 的 `build-collection.mjs --sign` 生成 |
+| `plugin.js.sig` | 是 | 本仓库 EEC | `plugin.js` 的 CMS 分离签名,由 CI 的 `build-from-catalog.mjs` 重新生成 |
 | `plugin.js.author.sig` | 否 | 插件作者 | `plugin.js` 的裸公钥分离签名,随插件产物提供,存在时用 `plugins/<author>/author_pub.pem` 校验 |
 
 `meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖,`dsc-plugin-template` 仓库仍在产出 `meta.json.author.sig`,待同步。
@@ -80,8 +80,8 @@ CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范
 ```
 
 - `path` 相对清单所在目录,正斜杠分隔,不含 `..`,不指向清单自身。
-- `revision` 每层独立:该层文件集合或内容变化时加一,不变时沿用旧值,没有旧清单时从 1 开始。
-- 清单与签名由 `pnpm build` 与 `pnpm sign` 生成,必须随源码提交入库;`revision` 从该层上一份清单读出,不入库就会在每次全新 checkout 时退回 1。
+- `revision` 每层独立:该层文件集合或内容变化时加一,不变时沿用旧值;上一份值按层从已发布站点的同名 `manifest.json` 读取,取不到时从 1 开始。
+- pages 包内的清单与签名由构建生成,不提交到仓库。
 
 ## 目录示例
 
@@ -103,4 +103,4 @@ plugins/
         plugin.js.author.sig
 ```
 
-合集根目录另有 `eec.pem`、`meta.json`、`datalog.json`、`tags.json`,以及 L1 清单 `manifest.json` 与 `manifest.json.sig`,含义见根目录 [README](../README.md)。
+pages 包根目录另有 `meta.json`、`tags.json`、`datalog.json`,以及 L1 清单 `manifest.json` 与 `manifest.json.sig`,含义见根目录 [README](../README.md)。仓库内不存放 `eec.pem`,合集证书只在 `certs/awesome-dsc-plugin-eec.crt`。
