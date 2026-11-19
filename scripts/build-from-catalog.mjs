@@ -15,7 +15,7 @@
  * 产出(pages 根目录):
  *   index.html 与 assets/              来自 site 构建产物
  *   meta.json、tags.json               原样取自 site/meta.json 与 site/tags.json
- *   datalog.json                       由 catalog 生成
+ *   plugins.json                       插件目录索引,由 catalog 生成
  *   manifest.json、manifest.json.sig   L1 清单及其签名
  *   catalog/                           登记信息复制,并额外生成 index.json 与 anomalies.json
  *   certs/                             来自 main 分支,不纳入任何清单
@@ -61,6 +61,7 @@ import { basename, join, resolve } from 'node:path'
 import { formatProblems, verifyCollection } from './lib/collection-verify.mjs'
 import { buildLayerManifests, listLayerDirs, problem } from './lib/layer-manifests.mjs'
 import { buildAnomalyReport, buildCatalogIndex } from './lib/catalog-index.mjs'
+import { readCollectionMeta } from './lib/collection-meta.mjs'
 import { EEC_CERT_BASENAME, certMatchesKey, requireOpenssl, resolveKeyFile, signFileCms, verifyChain } from './pki.mjs'
 import { fetchVersion, fetchVersions, readCatalog } from './lib/catalog.mjs'
 
@@ -71,7 +72,7 @@ const RESERVED_TOP_LEVEL = [
   'certs',
   'meta.json',
   'tags.json',
-  'datalog.json',
+  'plugins.json',
   'manifest.json',
   'manifest.json.sig',
   'eec.pem',
@@ -495,25 +496,11 @@ async function writePluginsTree({ staging, catalog, anomalies, problems, timeout
   return { includedAuthors, includedPlugins, versionCount }
 }
 
-/** 生成 datalog.json:每个插件一条,tag 取自该插件 plugin.json 的 tags。 */
-function buildDatalog(plugins) {
+/** 生成 plugins.json(插件目录索引):每个插件一条,tag 取自该插件 plugin.json 的 tags。 */
+function buildPluginsIndex(plugins) {
   return plugins
     .map((plugin) => ({ plugin_name: plugin.name, author: plugin.author, tag: Array.isArray(plugin.tags) ? [...plugin.tags] : [] }))
     .sort((left, right) => (left.plugin_name < right.plugin_name ? -1 : 1))
-}
-
-/** 读取合集元数据,校验下载计数相关字段。 */
-function readCollectionMeta(path) {
-  const data = readJsonFile(path, 'meta.json')
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) throw new Error('meta.json 的顶层必须是对象')
-  if (typeof data.DOWNLOAD_COUNT_ENABLE !== 'boolean') throw new Error('meta.json 的 DOWNLOAD_COUNT_ENABLE 必须是布尔值')
-  if (data.DOWNLOAD_COUNT_ENABLE === true) {
-    if (typeof data.DOWNLOAD_COUNT_API !== 'string' || data.DOWNLOAD_COUNT_API.length === 0) {
-      throw new Error('meta.json 的 DOWNLOAD_COUNT_API 必须是非空字符串')
-    }
-    if (typeof data.API_NEED_IP !== 'boolean') throw new Error('meta.json 的 API_NEED_IP 必须是布尔值')
-  }
-  return data
 }
 
 /**
@@ -675,7 +662,7 @@ async function main() {
 
     writeJsonFile(join(staging, 'meta.json'), readCollectionMeta(resolve(options.meta)))
     writeJsonFile(join(staging, 'tags.json'), presetTags)
-    writeJsonFile(join(staging, 'datalog.json'), buildDatalog(includedPlugins))
+    writeJsonFile(join(staging, 'plugins.json'), buildPluginsIndex(includedPlugins))
     writeJsonFile(
       join(staging, 'catalog', CATALOG_INDEX_FILE),
       buildCatalogIndex({ collectionName, releaseTag, authors: includedAuthors, plugins: includedPlugins }),

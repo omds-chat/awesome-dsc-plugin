@@ -34,7 +34,7 @@ import {
  * 分发内容里的合集根文件。三层清单与签名一并分发,签名针对拷贝后的字节依然有效。
  * 终端签名证书不在根目录,由 writeDist 复制整个 certs 目录。
  */
-const ROOT_DIST_FILES = ['meta.json', 'datalog.json', 'tags.json', MANIFEST_FILE, MANIFEST_FILE + '.sig']
+const ROOT_DIST_FILES = ['meta.json', 'plugins.json', 'tags.json', MANIFEST_FILE, MANIFEST_FILE + '.sig']
 
 function usage() {
   process.stdout.write([
@@ -98,17 +98,17 @@ function readJson(path) {
 }
 
 function listVersionDirs(root) {
-  const datalogPath = join(root, 'datalog.json')
-  if (!existsSync(datalogPath)) return []
-  let datalog
+  const pluginsIndexPath = join(root, 'plugins.json')
+  if (!existsSync(pluginsIndexPath)) return []
+  let pluginsIndex
   try {
-    datalog = readJson(datalogPath)
+    pluginsIndex = readJson(pluginsIndexPath)
   } catch {
     return []
   }
-  if (!Array.isArray(datalog)) return []
+  if (!Array.isArray(pluginsIndex)) return []
   const found = []
-  for (const entry of datalog) {
+  for (const entry of pluginsIndex) {
     if (typeof entry !== 'object' || entry === null) continue
     if (typeof entry.plugin_name !== 'string' || typeof entry.author !== 'string') continue
     const dirName = entry.plugin_name.split('/').pop()
@@ -209,17 +209,17 @@ function copyTree(srcDir, destDir) {
 }
 
 function collectIndex(root) {
-  const datalogPath = join(root, 'datalog.json')
-  if (!existsSync(datalogPath)) return []
-  let datalog
+  const pluginsIndexPath = join(root, 'plugins.json')
+  if (!existsSync(pluginsIndexPath)) return []
+  let pluginsIndex
   try {
-    datalog = readJson(datalogPath)
+    pluginsIndex = readJson(pluginsIndexPath)
   } catch {
     return []
   }
-  if (!Array.isArray(datalog)) return []
+  if (!Array.isArray(pluginsIndex)) return []
   const index = []
-  for (const entry of datalog) {
+  for (const entry of pluginsIndex) {
     if (typeof entry !== 'object' || entry === null) continue
     if (typeof entry.plugin_name !== 'string' || typeof entry.author !== 'string') continue
     const dirName = entry.plugin_name.split('/').pop()

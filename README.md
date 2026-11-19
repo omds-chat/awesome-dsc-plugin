@@ -28,7 +28,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 ├── assets/                            # 站点构建产物:页面脚本与样式
 ├── meta.json                          # L1,合集元数据,含下载计数开关
 ├── tags.json                          # L1,预设标签
-├── datalog.json                       # L1,插件目录,由 catalog 生成
+├── plugins.json                       # L1,插件目录索引,由 catalog 生成
 ├── manifest.json                      # L1 清单
 ├── manifest.json.sig                  # L1 清单签名
 ├── catalog/                           # 收录登记复制(含 removed.json),另含构建生成的 index.json 与 anomalies.json,不进任何清单
@@ -54,11 +54,11 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 根目录不再有 `eec.pem`:合集证书的固定位置是 `certs/awesome-dsc-plugin-eec.crt`,随 pages 包分发,不进任何清单;根证书同样不进分发内容。
 
-合集设置放在 `site/`:`site/meta.json` 与 `site/tags.json` 是 pages 包同名文件的唯一来源,内容原样进入 pages 包。`datalog.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 是构建产物,只在构建出的 pages 包里出现,仓库根不再存放它们,也没有空基线。
+合集设置放在 `site/`:`site/meta.json` 与 `site/tags.json` 是 pages 包同名文件的唯一来源,内容原样进入 pages 包。`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 是构建产物,只在构建出的 pages 包里出现,仓库根不再存放它们,也没有空基线。
 
 | 层 | 位置 | 覆盖的文件(相对该层目录) |
 |:---:|:---:|:---:|
-| L1 | pages 包根 | `meta.json`、`datalog.json`、`tags.json`、`plugins/author_manifest.json`,其中 `tags.json` 存在时覆盖 |
+| L1 | pages 包根 | `meta.json`、`plugins.json`(插件目录索引)、`tags.json`、`plugins/author_manifest.json`,其中 `tags.json` 存在时覆盖 |
 | L2 | `plugins/<作者>/` | `author_pub.pem`、`plugin_manifest.json`,文件存在才覆盖 |
 | L3 | `plugins/<作者>/<插件>/` | `versions.json`、各版本目录下的 `meta.json` |
 
@@ -71,7 +71,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
   "schemaVersion": 1,
   "revision": 1,
   "files": [
-    { "path": "datalog.json", "sha512": "<128 位小写十六进制>" }
+    { "path": "plugins.json", "sha512": "<128 位小写十六进制>" }
   ]
 }
 ```
@@ -85,7 +85,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 三层之间不做收束:L1 不引用 L2,L2 不引用 L3,任何一层都可以单独发布、单独校验、单独重签。取舍是放弃「一次校验拿到全树摘要」,换取按插件增量更新:改一个插件只需 L3 的 `revision` 加一,L2 与 L1 的 `revision` 不变,客户端也只重新拉取这一层的清单与签名。若把三层收束成一份根清单,任何插件发版都会改动根清单,所有客户端都得重拉整份摘要。
 
-pages 包是构建产物,不提交回仓库:每次 Release 全量重建并整体替换,仓库里不保留 `datalog.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig`,也不放空基线来喂仓库级校验。因此每层的 `revision` 不能在源码树里沿用,只能按层从已发布站点的同名 `manifest.json` 读取:文件集合与哈希都没变时沿用旧值,有变化时加一。
+pages 包是构建产物,不提交回仓库:每次 Release 全量重建并整体替换,仓库里不保留 `plugins.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig`,也不放空基线来喂仓库级校验。因此每层的 `revision` 不能在源码树里沿用,只能按层从已发布站点的同名 `manifest.json` 读取:文件集合与哈希都没变时沿用旧值,有变化时加一。
 
 ## 必需文件
 
@@ -93,7 +93,7 @@ pages 包内各位置的必需与可选文件如下。它们只存在于构建�
 
 | 位置 | 必需 | 可选 |
 |:---:|:---:|:---:|
-| pages 包根 | `meta.json`、`datalog.json`、`plugins/author_manifest.json`、`manifest.json`、`manifest.json.sig` | `tags.json` |
+| pages 包根 | `meta.json`、`plugins.json`、`plugins/author_manifest.json`、`manifest.json`、`manifest.json.sig` | `tags.json` |
 | `certs/` | `awesome-dsc-plugin-eec.crt`,不进任何清单 | `awesome-dsc-plugin-secret.pub`,同样不进清单 |
 | `catalog/` | 每位作者的 `author.json`、`author_pub.pem` 与 `<插件>/plugin.json`,原样复制,不进任何清单 | 无 |
 | `plugins/<作者>/` | `plugin_manifest.json`、`manifest.json`、`manifest.json.sig` | `author_pub.pem` |
@@ -183,11 +183,11 @@ openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -conten
 | 编号 | 规则 |
 |:---:|:---:|
 | 1 | 合集证书 `certs/awesome-dsc-plugin-eec.crt` 存在(根目录不再有 `eec.pem`),由给定根证书签发(`--root-ca` 或 `ROOT_CA_PATH`),未过期,`keyUsage` 含 `digitalSignature`,`basicConstraints` 非 CA |
-| 2 | `datalog.json` 中的每个插件都在 `plugins/<author>/plugin_manifest.json` 中出现,且插件目录存在 |
+| 2 | 插件目录索引 `plugins.json` 中的每个插件都在 `plugins/<author>/plugin_manifest.json` 中出现,且插件目录存在 |
 | 3 | 每个插件目录有 `versions.json`,`latest` 必须在 `versions` 列表内 |
 | 4 | 每个版本目录有 `meta.json`、`plugin.js`、`plugin.js.sig`,并用 `openssl cms -verify -binary -md sha512 -inform DER -CAfile <根证书> -certfile certs/awesome-dsc-plugin-eec.crt` 验签,失败即报错 |
 | 5 | 若版本目录存在 `plugin.js.author.sig`,则 `plugins/<author>/author_pub.pem` 必须存在,并用 `openssl pkeyutl -verify` 验证,失败即报错;其它 `*.author.sig` 不参与校验 |
-| 6 | `tags.json` 存在时,`datalog.json` 的 `tag` 必须取自其中 |
+| 6 | `tags.json` 存在时,插件目录索引 `plugins.json` 的 `tag` 必须取自其中 |
 | 7 | 三层清单存在且结构合法:`schemaVersion` 为 1,`revision` 为正整数,`files` 为非空数组,条目只含 `path` 与 `sha512` |
 | 8 | 清单条目的 `path` 合法:正斜杠、相对路径、不含 `..`、不指向清单自身、不重复 |
 | 9 | 覆盖范围与该层应有的文件严格相等:该有的都在清单里,清单里没有多余项,L3 不得出现 `plugin.js` 与 `plugin.js.sig` |
@@ -217,6 +217,58 @@ EEC 证书由 DeepSeek-Chat-Enhanced 仓库的根证书机构签发,本仓库不
 5. 合并后 CI 用根证书校验 `certs/awesome-dsc-plugin-eec.crt` 的签发链,链不通、证书过期、`keyUsage` 或 `basicConstraints` 不符都会中止构建。
 
 根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,本仓库与 CI 都拿不到,也不需要。仓库内提交的 `certs/awesome-dsc-plugin-eec.crt` 只含公钥材料,由该根 CA 签发;CI 也支持用 secret `EEC_CERT_PEM` 临时覆盖它,覆盖后同样要先过证书链校验。
+
+## 维护者自查脚本
+
+`scripts/` 下有一组可独立运行的自查脚本,供维护者在 CI 之前自己把整仓交叉检查一遍。它们不重复实现规则:`lib/catalog-checks.mjs`、`lib/collection-verify.mjs`、`lib/consistency-verify.mjs`、`lib/collection-meta.mjs` 就是 `pnpm verify:catalog` 与 `pnpm verify:bundle` 用的同一批模块,自查脚本只做编排与 JSON 输出。
+
+| 脚本 | 检查项 | 需要构建产物 |
+|:---:|:---:|:---:|
+| `check-authors.mjs` | 作者目录名是否符合 GitHub 用户名规则,以及大小写不敏感唯一性(`Alice` 与 `alice` 属同一个用户) | 否 |
+| `check-plugins.mjs` | 插件名规则、同名插件全局唯一性,以及跨作者共用裸目录名的告警 | 否 |
+| `check-versions.mjs` | `versions.json` 与 `plugins/` 树一致:latest 在列表内、版本目录与必需文件齐全、`meta.json` 对齐 | 是 |
+| `check-manifests.mjs` | 三层清单的覆盖范围与 SHA-512,含清单签名 | 是 |
+| `check-certs.mjs` | `certs/` 的终端签名证书与签发链 | 否 |
+| `check-removed.mjs` | `removed.json` 的结构,以及「已下架却仍有登记」的矛盾 | 否 |
+| `check-site.mjs` | `site/tags.json`、`site/meta.json` 与 `catalog/` 的一致性 | 否 |
+| `check-all.mjs` | 依次跑完上面七项,输出一个总 JSON | 视检查项 |
+
+用法:
+
+```bash
+# 一项一项跑,人读输出;有 error 级问题时退出码为 1
+node scripts/check-authors.mjs
+node scripts/check-manifests.mjs --dir dist/pages --root-ca root_ca.crt
+
+# 输出单个 JSON 对象,便于脚本处理
+node scripts/check-authors.mjs --json > temp/authors.json
+
+# 组合调用:管道合并多个检查结果
+node scripts/check-authors.mjs --json | node scripts/summarize.mjs
+node scripts/summarize.mjs temp/authors.json temp/certs.json
+
+# 一次跑完全部检查,输出一个总 JSON;退出码按是否全部通过决定
+pnpm check
+```
+
+`check-versions.mjs` 与 `check-manifests.mjs` 只看构建出的 pages 包:目录不存在时记一条 `BUNDLE_MISSING` 告警并跳过,退出码仍为 0。其余检查只读仓库源文件,不需要任何构建产物。
+
+### JSON 字段
+
+单检查结果与汇总结果都是单个 JSON 对象,不是逐行文本,可以直接 `JSON.parse`:
+
+| 字段 | 类型 | 说明 |
+|:---:|:---:|:---:|
+| `ok` | boolean | 是否通过;只看 `error` 级问题,有 `error` 即 `false` |
+| `check` | string | 检查项标识,如 `authors`;汇总结果为 `all` |
+| `title` | string | 检查项名称 |
+| `target` | string 或 null | 本次检查的对象(目录或文件) |
+| `counts` | object | `errors`、`warnings`、`problems` 三个计数 |
+| `problems` | array | 问题列表,每项含 `code`、`path`、`message`、`level`;汇总结果每项另含 `check` |
+| `stats` | object | 该检查项的统计数字,随检查项不同 |
+| `checks` | array | 仅汇总结果:每个检查项的 `check`、`title`、`ok`、`target`、`counts` |
+
+退出码:0 通过,1 有 `error` 级问题,2 参数错误或运行失败。
 
 ## 仓库结构
 
@@ -251,13 +303,18 @@ awesome-dsc-plugin/
 │   ├── catalog-author.schema.json      author.json 的 JSON Schema
 │   ├── catalog-plugin.schema.json      plugin.json 的 JSON Schema
 │   ├── catalog-removed.schema.json     removed.json 的 JSON Schema
-│   └── catalog-index.schema.json       pages 包 catalog/index.json 的 JSON Schema
+│   ├── catalog-index.schema.json       pages 包 catalog/index.json 的 JSON Schema
+│   └── plugins.schema.json             pages 包 plugins.json(插件目录索引)的 JSON Schema
 ├── scripts/                            校验与构建脚本,只读输入、按需产出 dist/pages
 │   ├── pki.mjs                         OpenSSL PKI 封装,只调用命令行不做密码学
 │   ├── lib/collection-verify.mjs       三层清单与签名的校验逻辑
 │   ├── lib/catalog.mjs                 读取 catalog 登记并按 base_url 拉取版本与产物
 │   ├── lib/catalog-index.mjs           生成 catalog/index.json 与 catalog/anomalies.json
 │   ├── lib/layer-manifests.mjs         按层生成并签名三层清单
+│   ├── lib/catalog-checks.mjs          catalog/ 与 certs/ 的仓库级检查
+│   ├── lib/consistency-verify.mjs      pages 包的收录信息交叉校验
+│   ├── lib/collection-meta.mjs         合集元数据 site/meta.json 的规则
+│   ├── lib/check-suite.mjs             自查检查项定义,复用上述模块
 │   ├── build-from-catalog.mjs          按 catalog 组装 pages 包,CI 主入口
 │   ├── build-collection.mjs            对已构建的合集目录重签或重新生成三层清单
 │   ├── verify-catalog.mjs              仓库级校验:catalog/ 与 certs/ 的结构与证书材料
@@ -265,7 +322,10 @@ awesome-dsc-plugin/
 │   ├── verify-catalog-consistency.mjs  pages 包的收录信息交叉校验
 │   ├── verify-bundle.mjs               把上面两条 pages 包校验合成一个入口
 │   ├── check-syntax.mjs                全部脚本与站点源码的语法自检
-│   └── report-build-anomalies.mjs      把剔除的插件上报到本仓库 Issue,失败不阻塞发布
+│   ├── report-build-anomalies.mjs      把剔除的插件上报到本仓库 Issue,失败不阻塞发布
+│   ├── check-*.mjs                     维护者自查脚本:七个检查项各一个入口,详见「维护者自查脚本」
+│   ├── check-all.mjs                   自查汇总入口:一次跑完全部检查,输出一个总 JSON
+│   └── summarize.mjs                   把管道传入的多个检查结果合并成一个总 JSON
 └── site/                               合集设置与静态展示站点工程,构建产物进入 pages 包根目录
     ├── README.md                       站点说明:数据来源、构建与产物
     ├── build.mjs                       构建脚本,只用 Node 内置模块
@@ -275,7 +335,7 @@ awesome-dsc-plugin/
     └── src/                            站点源码:index.html 与 assets/
 ```
 
-仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与工程文件;`datalog.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
+仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与工程文件;`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
 
 ## 合集元数据
 
@@ -293,8 +353,8 @@ awesome-dsc-plugin/
 
 1. 提交 PR,在 `catalog/` 登记插件:`catalog/<作者>/author.json`、`catalog/<作者>/author_pub.pem`、`catalog/<作者>/<插件>/plugin.json`。字段、schema 与提交校验见 [catalog/README.md](catalog/README.md)。
 2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。
-3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,`datalog.json` 由 catalog 生成,`catalog/`(含 `removed.json`,本次剔除的作者与插件不在其中)与 `certs/` 复制进来,再在 `catalog/` 下写入 `index.json` 与 `anomalies.json`,并按层生成、签名 L1、L2、L3 三层清单。
-4. 交叉校验:`scripts/verify-catalog-consistency.mjs` 比对 `catalog/index.json`、`datalog.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止并列出差异。
+3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,插件目录索引 `plugins.json` 由 catalog 生成,`catalog/`(含 `removed.json`,本次剔除的作者与插件不在其中)与 `certs/` 复制进来,再在 `catalog/` 下写入 `index.json` 与 `anomalies.json`,并按层生成、签名 L1、L2、L3 三层清单。
+4. 交叉校验:`scripts/verify-catalog-consistency.mjs` 比对 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止并列出差异。
 5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,全部通过后整体替换已发布站点,不做版本留存。
 
 构建把两类问题分开处理,边界写在 `scripts/build-from-catalog.mjs` 的实现与 [catalog/README.md](catalog/README.md) 里:
@@ -306,7 +366,7 @@ awesome-dsc-plugin/
 
 签名失败、清单生成失败与分发自检失败既不是某位作者的登记错误,也不是单个插件的运行期问题,仍按构建失败处理。
 
-`datalog.json` 的 `tag` 取自每个插件 `plugin.json` 的 `tags`,`tags` 省略时为空数组。标签取值必须来自 `site/tags.json` 的预设清单;不在清单内的标签会让构建中止,并在报错里指出是哪个插件、哪个标签。
+插件目录索引 `plugins.json` 的 `tag` 取自每个插件 `plugin.json` 的 `tags`,`tags` 省略时为空数组。标签取值必须来自 `site/tags.json` 的预设清单;不在清单内的标签会让构建中止,并在报错里指出是哪个插件、哪个标签。
 
 ## 如何收录插件
 
@@ -334,7 +394,7 @@ catalog/<作者>/
 | 步骤 | 路径 | 用途 |
 |:---:|:---:|:---:|
 | 1 | `<base_url>/meta.json` | 判断该来源是否启用下载计数 |
-| 2 | `<base_url>/datalog.json` | 列出全部插件、作者与标签 |
+| 2 | `<base_url>/plugins.json` | 插件目录索引:列出全部插件、作者与标签 |
 | 3 | `<base_url>/certs/awesome-dsc-plugin-eec.crt` | 取合集终端签名证书,用根证书校验证书链;根目录没有 `eec.pem` |
 | 4 | `<base_url>/manifest.json` 与 `manifest.json.sig` | 校验 L1 清单签名与其中记录的 SHA-512 |
 | 5 | `<base_url>/plugins/<author>/manifest.json` 与 `manifest.json.sig` | 校验 L2 清单,拿到作者公钥与插件清单 |

@@ -28,7 +28,7 @@ The collection is published as a pages bundle: on every Release CI pulls the plu
 ├── assets/                            # site build output: page scripts and styles
 ├── meta.json                          # L1, collection metadata with the download counting switch
 ├── tags.json                          # L1, preset tags
-├── datalog.json                       # L1, plugin catalog generated from catalog/
+├── plugins.json                       # L1, plugin index generated from catalog/
 ├── manifest.json                      # L1 manifest
 ├── manifest.json.sig                  # L1 manifest signature
 ├── catalog/                           # registrations copied over (removed.json included), plus the generated index.json and anomalies.json; covered by no manifest
@@ -54,11 +54,11 @@ The collection is published as a pages bundle: on every Release CI pulls the plu
 
 There is no `eec.pem` in the root any more: the collection certificate lives at `certs/awesome-dsc-plugin-eec.crt`, ships with the pages bundle and is covered by no manifest; the root certificate is not distribution content either.
 
-Collection settings live in `site/`: `site/meta.json` and `site/tags.json` are the only sources of the same-named files in the pages bundle and are copied over verbatim. `datalog.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are build output that exists only inside the pages bundle; the repository root keeps none of them and no baselines stand in for them.
+Collection settings live in `site/`: `site/meta.json` and `site/tags.json` are the only sources of the same-named files in the pages bundle and are copied over verbatim. `plugins.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are build output that exists only inside the pages bundle; the repository root keeps none of them and no baselines stand in for them.
 
 | Layer | Location | Covered files (relative to the layer directory) |
 |:---:|:---:|:---:|
-| L1 | pages bundle root | `meta.json`, `datalog.json`, `tags.json`, `plugins/author_manifest.json`, with `tags.json` covered when present |
+| L1 | pages bundle root | `meta.json`, `plugins.json` (the plugin index), `tags.json`, `plugins/author_manifest.json`, with `tags.json` covered when present |
 | L2 | `plugins/<author>/` | `author_pub.pem`, `plugin_manifest.json`, only when the file exists |
 | L3 | `plugins/<author>/<plugin>/` | `versions.json` and every version directory's `meta.json` |
 
@@ -71,7 +71,7 @@ Manifest format, with the JSON Schema in `schemas/manifest.schema.json`:
   "schemaVersion": 1,
   "revision": 1,
   "files": [
-    { "path": "datalog.json", "sha512": "<128 lowercase hex characters>" }
+    { "path": "plugins.json", "sha512": "<128 lowercase hex characters>" }
   ]
 }
 ```
@@ -85,7 +85,7 @@ Manifest format, with the JSON Schema in `schemas/manifest.schema.json`:
 
 The three layers are deliberately not folded together: L1 does not reference L2 and L2 does not reference L3, so each layer can be published, verified and re-signed on its own. The trade-off gives up "one check yields a digest of the whole tree" in exchange for per-plugin incremental updates: changing one plugin only increments the L3 `revision`, leaves L2 and L1 untouched, and clients refetch just that layer. Folding the layers into a single root manifest would make every plugin release rewrite the root manifest and force every client to refetch the whole digest.
 
-The pages bundle is a build artifact and is never committed back: every Release rebuilds it and replaces it wholesale, so the repository keeps no history of `datalog.json`, the plugin data under `plugins/`, `manifest.json` or `manifest.json.sig`, and no empty baselines stand in for them. Each layer's `revision` therefore cannot be carried over from the source tree; it is read per layer from the published site's `manifest.json`, kept when the file set and hashes are unchanged, and incremented otherwise.
+The pages bundle is a build artifact and is never committed back: every Release rebuilds it and replaces it wholesale, so the repository keeps no history of `plugins.json`, the plugin data under `plugins/`, `manifest.json` or `manifest.json.sig`, and no empty baselines stand in for them. Each layer's `revision` therefore cannot be carried over from the source tree; it is read per layer from the published site's `manifest.json`, kept when the file set and hashes are unchanged, and incremented otherwise.
 
 ## Required files
 
@@ -93,7 +93,7 @@ The required and optional files of each location inside the pages bundle. They e
 
 | Location | Required | Optional |
 |:---:|:---:|:---:|
-| pages bundle root | `meta.json`, `datalog.json`, `plugins/author_manifest.json`, `manifest.json`, `manifest.json.sig` | `tags.json` |
+| pages bundle root | `meta.json`, `plugins.json`, `plugins/author_manifest.json`, `manifest.json`, `manifest.json.sig` | `tags.json` |
 | `certs/` | `awesome-dsc-plugin-eec.crt`, covered by no manifest | `awesome-dsc-plugin-secret.pub`, likewise covered by none |
 | `catalog/` | every author's `author.json`, `author_pub.pem` and `<plugin>/plugin.json`, copied verbatim and covered by no manifest | none |
 | `plugins/<author>/` | `plugin_manifest.json`, `manifest.json`, `manifest.json.sig` | `author_pub.pem` |
@@ -183,11 +183,11 @@ Author signatures are optional. Without one, a version carries only this reposit
 | # | Rule |
 |:---:|:---:|
 | 1 | The collection certificate `certs/awesome-dsc-plugin-eec.crt` exists (the root no longer carries an `eec.pem`), chains to the given root certificate (`--root-ca` or `ROOT_CA_PATH`), is not expired, has `digitalSignature` in `keyUsage` and is not a CA |
-| 2 | Every plugin in `datalog.json` appears in `plugins/<author>/plugin_manifest.json` and its plugin directory exists |
+| 2 | Every plugin in the plugin index `plugins.json` appears in `plugins/<author>/plugin_manifest.json` and its plugin directory exists |
 | 3 | Every plugin directory has `versions.json` and `latest` is present in `versions` |
 | 4 | Every version directory has `meta.json`, `plugin.js` and `plugin.js.sig`, verified with `openssl cms -verify -binary -md sha512 -inform DER -CAfile <root> -certfile certs/awesome-dsc-plugin-eec.crt`; a failure is an error |
 | 5 | When `plugin.js.author.sig` exists in a version directory, `plugins/<author>/author_pub.pem` must exist and the signature must verify with `openssl pkeyutl -verify`; a failure is an error. Other `*.author.sig` files are not checked |
-| 6 | When `tags.json` exists, every `tag` in `datalog.json` comes from it |
+| 6 | When `tags.json` exists, every `tag` in the plugin index `plugins.json` comes from it |
 | 7 | All three manifests exist and are structurally valid: `schemaVersion` is 1, `revision` is a positive integer, `files` is a non-empty array, and each entry holds only `path` and `sha512` |
 | 8 | Every `path` is valid: forward slashes, relative, no `..`, not the manifest itself, no duplicates |
 | 9 | Coverage matches the layer exactly: every required file is listed and nothing extra is, so L3 never lists `plugin.js` or `plugin.js.sig` |
@@ -217,6 +217,58 @@ The EEC certificate is issued by the root CA of the DeepSeek-Chat-Enhanced repos
 5. After merge, CI checks the chain of `certs/awesome-dsc-plugin-eec.crt` against the root certificate and aborts on a broken chain, an expired certificate, or a `keyUsage` or `basicConstraints` mismatch.
 
 The root private key lives in the offline environment of the DeepSeek-Chat-Enhanced repository; this repository and CI neither have nor need it. The committed `certs/awesome-dsc-plugin-eec.crt` carries public material only and is issued by that root CA; CI can also override it with the secret `EEC_CERT_PEM`, and the override still has to pass the chain check.
+
+## Maintainer self-check scripts
+
+`scripts/` ships a set of standalone self-check scripts so a maintainer can cross-check the whole repository before CI runs. They add no new rules: `lib/catalog-checks.mjs`, `lib/collection-verify.mjs`, `lib/consistency-verify.mjs` and `lib/collection-meta.mjs` are the same modules `pnpm verify:catalog` and `pnpm verify:bundle` use, and these scripts only orchestrate them and print JSON.
+
+| Script | Check | Needs build output |
+|:---:|:---:|:---:|
+| `check-authors.mjs` | Author directory names follow the GitHub username rule, and are unique case-insensitively (`Alice` and `alice` are the same user) | No |
+| `check-plugins.mjs` | Plugin name rules, global uniqueness of plugin names, and a warning when authors share a bare plugin directory name | No |
+| `check-versions.mjs` | `versions.json` agrees with the `plugins/` tree: latest listed, version directories and required files present, `meta.json` aligned | Yes |
+| `check-manifests.mjs` | Coverage and SHA-512 of the three manifests, signatures included | Yes |
+| `check-certs.mjs` | The end-entity signing certificate under `certs/` and its chain | No |
+| `check-removed.mjs` | Structure of `removed.json` and the "removed yet still registered" contradiction | No |
+| `check-site.mjs` | `site/tags.json` and `site/meta.json` agree with `catalog/` | No |
+| `check-all.mjs` | Runs the seven checks above and prints one combined JSON | Depends |
+
+Usage:
+
+```bash
+# One check at a time, human-readable output; exit code 1 when an error-level problem exists
+node scripts/check-authors.mjs
+node scripts/check-manifests.mjs --dir dist/pages --root-ca root_ca.crt
+
+# One JSON object, easy for scripts to consume
+node scripts/check-authors.mjs --json > temp/authors.json
+
+# Combine results through a pipe
+node scripts/check-authors.mjs --json | node scripts/summarize.mjs
+node scripts/summarize.mjs temp/authors.json temp/certs.json
+
+# Every check in one run, one combined JSON; the exit code reports whether all passed
+pnpm check
+```
+
+`check-versions.mjs` and `check-manifests.mjs` only look at a built pages bundle: when the directory is absent they record a `BUNDLE_MISSING` warning and skip, and the exit code stays 0. The other checks read repository sources only.
+
+### JSON fields
+
+A single check result and the combined result are both one JSON object, not line text, so `JSON.parse` works directly:
+
+| Field | Type | Meaning |
+|:---:|:---:|:---:|
+| `ok` | boolean | Whether the check passed; only `error`-level problems count, so any `error` makes it `false` |
+| `check` | string | Check identifier, such as `authors`; the combined result uses `all` |
+| `title` | string | Human-readable check name |
+| `target` | string or null | What the check inspected (directory or file) |
+| `counts` | object | `errors`, `warnings` and `problems` counters |
+| `problems` | array | Problem list; every item has `code`, `path`, `message` and `level`, and combined results add `check` |
+| `stats` | object | Per-check statistics |
+| `checks` | array | Combined result only: `check`, `title`, `ok`, `target` and `counts` per check |
+
+Exit codes: 0 passed, 1 an `error`-level problem exists, 2 usage error or runtime failure.
 
 ## Repository layout
 
@@ -251,13 +303,18 @@ awesome-dsc-plugin/
 │   ├── catalog-author.schema.json      JSON Schema of author.json
 │   ├── catalog-plugin.schema.json      JSON Schema of plugin.json
 │   ├── catalog-removed.schema.json     JSON Schema of removed.json
-│   └── catalog-index.schema.json       JSON Schema of the bundle catalog/index.json
+│   ├── catalog-index.schema.json       JSON Schema of the bundle catalog/index.json
+│   └── plugins.schema.json             JSON Schema of the bundle plugins.json (the plugin index)
 ├── scripts/                            verification and build scripts; read their inputs, write dist/pages
 │   ├── pki.mjs                         OpenSSL PKI wrapper, drives the CLI only
 │   ├── lib/collection-verify.mjs       shared verification logic
 │   ├── lib/catalog.mjs                 reads catalog registrations, fetches versions and artifacts via base_url
 │   ├── lib/catalog-index.mjs           generates catalog/index.json and catalog/anomalies.json
 │   ├── lib/layer-manifests.mjs         generates and signs the three manifests layer by layer
+│   ├── lib/catalog-checks.mjs          repository checks for catalog/ and certs/
+│   ├── lib/consistency-verify.mjs      cross-checks the collected information of a pages bundle
+│   ├── lib/collection-meta.mjs         rules for the collection metadata site/meta.json
+│   ├── lib/check-suite.mjs             self-check definitions, reusing the modules above
 │   ├── build-from-catalog.mjs          assembles the pages bundle from catalog/, the CI entry point
 │   ├── build-collection.mjs            re-signs or regenerates the three manifests for a built collection directory
 │   ├── verify-catalog.mjs              repository check: structure and certificate material of catalog/ and certs/
@@ -265,7 +322,10 @@ awesome-dsc-plugin/
 │   ├── verify-catalog-consistency.mjs  cross-checks the collected information of a pages bundle
 │   ├── verify-bundle.mjs               combines the two pages bundle checks into one entry point
 │   ├── check-syntax.mjs                syntax check for every script and site source file
-│   └── report-build-anomalies.mjs      reports excluded plugins as an issue, never blocks the release
+│   ├── report-build-anomalies.mjs      reports excluded plugins as an issue, never blocks the release
+│   ├── check-*.mjs                     maintainer self-check scripts, one entry per check
+│   ├── check-all.mjs                   combined self-check entry: every check, one combined JSON
+│   └── summarize.mjs                   merges several self-check results into one combined JSON
 └── site/                               collection settings and showcase site project; its output goes to the bundle root
     ├── README.md                       site notes: data sources, build and output
     ├── build.mjs                       build script, Node built-ins only
@@ -275,7 +335,7 @@ awesome-dsc-plugin/
     └── src/                            site source: index.html and assets/
 ```
 
-The repository root holds only `catalog/`, `certs/`, `schemas/`, `scripts/`, `site/` and the engineering files; `datalog.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are never committed and exist only inside the built pages bundle, with page data, manifests and signatures produced by CI at Release time. Collection settings and site settings both live in `site/`: the collection metadata is `site/meta.json`, the preset tags are `site/tags.json`, and the showcase site project is `site/`. `dist/`, `site/dist/` and `temp/` are pure generated directories and are not committed. The verification semantics of `scripts/lib/collection-verify.mjs` and `scripts/pki.mjs` follow [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template): change the template first and then sync this repository, so the two never drift.
+The repository root holds only `catalog/`, `certs/`, `schemas/`, `scripts/`, `site/` and the engineering files; `plugins.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are never committed and exist only inside the built pages bundle, with page data, manifests and signatures produced by CI at Release time. Collection settings and site settings both live in `site/`: the collection metadata is `site/meta.json`, the preset tags are `site/tags.json`, and the showcase site project is `site/`. `dist/`, `site/dist/` and `temp/` are pure generated directories and are not committed. The verification semantics of `scripts/lib/collection-verify.mjs` and `scripts/pki.mjs` follow [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template): change the template first and then sync this repository, so the two never drift.
 
 ## Collection metadata
 
@@ -293,8 +353,8 @@ This collection does not enable download counting.
 
 1. Open a PR that registers the plugin in `catalog/`: `catalog/<author>/author.json`, `catalog/<author>/author_pub.pem` and `catalog/<author>/<plugin>/plugin.json`. Fields, schemas and the submission checks are documented in [catalog/README.md](catalog/README.md).
 2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC.
-3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from `site/`, `datalog.json` is generated from `catalog/`, `catalog/` (with `removed.json`, minus the authors and plugins excluded from this release) and `certs/` are copied over, `catalog/index.json` and `catalog/anomalies.json` are then written, and the L1, L2 and L3 manifests are generated and signed layer by layer.
-4. It cross-checks the result: `scripts/verify-catalog-consistency.mjs` compares `catalog/index.json`, `datalog.json`, `plugins/author_manifest.json`, the `catalog/` copy and the `plugins/` tree, and aborts with a non-zero exit code listing every difference.
+3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from `site/`, the plugin index `plugins.json` is generated from `catalog/`, `catalog/` (with `removed.json`, minus the authors and plugins excluded from this release) and `certs/` are copied over, `catalog/index.json` and `catalog/anomalies.json` are then written, and the L1, L2 and L3 manifests are generated and signed layer by layer.
+4. It cross-checks the result: `scripts/verify-catalog-consistency.mjs` compares `catalog/index.json`, `plugins.json`, `plugins/author_manifest.json`, the `catalog/` copy and the `plugins/` tree, and aborts with a non-zero exit code listing every difference.
 5. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes replaces the published site wholesale, keeping no versions.
 
 The build separates two kinds of problem; the boundary is implemented in `scripts/build-from-catalog.mjs` and documented in [catalog/README.md](catalog/README.md):
@@ -306,7 +366,7 @@ The build separates two kinds of problem; the boundary is implemented in `script
 
 Signing failures, manifest generation failures and bundle self-check failures are neither an author registration error nor a single-plugin runtime problem, so they still fail the build.
 
-Every `tag` in `datalog.json` comes from that plugin `plugin.json` `tags`, and an omitted `tags` means an empty array. Tag values must come from the preset list in `site/tags.json`; a tag outside it fails the build and names the plugin and the tag.
+Every `tag` in the plugin index `plugins.json` comes from that plugin `plugin.json` `tags`, and an omitted `tags` means an empty array. Tag values must come from the preset list in `site/tags.json`; a tag outside it fails the build and names the plugin and the tag.
 
 ## How to submit a plugin
 
@@ -334,7 +394,7 @@ The market reads collection metadata and the plugin catalog, then fetches each m
 | Step | Path | Purpose |
 |:---:|:---:|:---:|
 | 1 | `<base_url>/meta.json` | Decide whether the source enables download counting |
-| 2 | `<base_url>/datalog.json` | List every plugin, author and tag |
+| 2 | `<base_url>/plugins.json` | The plugin index: every plugin, author and tag |
 | 3 | `<base_url>/certs/awesome-dsc-plugin-eec.crt` | Fetch the collection end-entity certificate and validate its chain against the root certificate; the root has no `eec.pem` |
 | 4 | `<base_url>/manifest.json` and `manifest.json.sig` | Verify the L1 signature and the SHA-512 values it records |
 | 5 | `<base_url>/plugins/<author>/manifest.json` and `manifest.json.sig` | Verify the L2 manifest and obtain the author public key and plugin list |

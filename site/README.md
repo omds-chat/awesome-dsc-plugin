@@ -21,8 +21,8 @@
 |:---:|:---:|:---:|:---:|
 | 1 | `catalog/index.json` | 可选的登记索引,提供作者、主页与插件展示字段,字段优先于第 5 步 | 回落到第 2 步 |
 | 2 | `plugins/author_manifest.json` | 作者清单,含 `username` 与 `profile` | 回落到第 3 步 |
-| 3 | `datalog.json` | 兜底清单,只提供 `author` 与 `plugin_name` | 页面提示没有读到作者 |
-| 4 | `plugins/<作者>/plugin_manifest.json` | 该作者的插件名数组 | 用 `datalog.json` 里该作者的条目 |
+| 3 | `plugins.json` | 插件目录索引,兜底清单,只提供 `author` 与 `plugin_name` | 页面提示没有读到作者 |
+| 4 | `plugins/<作者>/plugin_manifest.json` | 该作者的插件名数组 | 用 `plugins.json` 里该作者的条目 |
 | 5 | `catalog/<作者>/<插件>/plugin.json` | 插件描述、许可证、仓库链接 | 用最新版本 `meta.json` |
 | 6 | `plugins/<作者>/<插件>/versions.json` | 版本列表与当前版本 `latest` | 显示为没有版本 |
 
@@ -117,7 +117,7 @@ site/dist/
     └── styles.css  样式
 ```
 
-流水线读取 `vars.SITE_DIR`,默认 `site/dist`,把该目录整体复制进 pages 包根目录;`plugins/`、`catalog/`、`certs/`、`meta.json`、`tags.json`、`datalog.json`、清单与 `eec.pem` 这些顶层名字由流水线独占,站点产物不得占用。产物是纯静态文件,不需要服务端,也没有任何运行时依赖。
+流水线读取 `vars.SITE_DIR`,默认 `site/dist`,把该目录整体复制进 pages 包根目录;`plugins/`、`catalog/`、`certs/`、`meta.json`、`tags.json`、`plugins.json`、清单与 `eec.pem` 这些顶层名字由流水线独占,站点产物不得占用。产物是纯静态文件,不需要服务端,也没有任何运行时依赖。
 
 ## 约定
 

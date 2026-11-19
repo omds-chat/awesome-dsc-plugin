@@ -9,7 +9,7 @@
 
 合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/` 本身,构建产物落在 `site/dist`。
 
-仓库根不再存放 `datalog.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/`:它们是 pages 包的构建产物,只在构建出的 pages 包里出现,也不再有「空基线」。因此仓库级校验只看 `catalog/` 与 `certs/`(`pnpm verify:catalog`),pages 包的校验用 `pnpm verify:bundle`。
+仓库根不再存放 `plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/`:它们是 pages 包的构建产物,只在构建出的 pages 包里出现,也不再有「空基线」。因此仓库级校验只看 `catalog/` 与 `certs/`(`pnpm verify:catalog`),pages 包的校验用 `pnpm verify:bundle`。
 
 ## 二、证书位置
 
@@ -25,7 +25,7 @@ pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `
 |:---:|:---:|
 | `index.html`、`assets/` | site 构建产物 |
 | `meta.json`、`tags.json` | 取自 `site/meta.json` 与 `site/tags.json`,原样复制 |
-| `datalog.json` | 由 `scripts/build-from-catalog.mjs` 按 catalog 生成 |
+| `plugins.json` | 插件目录索引,由 `scripts/build-from-catalog.mjs` 按 catalog 生成 |
 | `manifest.json`、`manifest.json.sig` | L1 清单及其签名 |
 | `catalog/` | main 分支的 catalog 目录复制进来的登记文件,含根目录的 `README.md` 与 `removed.json`,本次剔除的作者与插件不复制;另加构建生成的 `index.json`(汇总索引)与 `anomalies.json`(剔除清单) |
 | `certs/` | main 分支的 certs 目录,原样复制 |
@@ -52,7 +52,7 @@ plugins/<作者>/<插件>/<版本>/plugin.js.author.sig   可选,作者自签名
 
 | 层 | 目录 | 覆盖文件 |
 |:---:|:---:|:---:|
-| L1 | pages 根 | `meta.json`、`datalog.json`、`tags.json`、`plugins/author_manifest.json` |
+| L1 | pages 根 | `meta.json`、`plugins.json`、`tags.json`、`plugins/author_manifest.json` |
 | L2 | `plugins/<作者>` | `author_pub.pem`、`plugin_manifest.json` |
 | L3 | `plugins/<作者>/<插件>` | `versions.json` 与各版本的 `meta.json` |
 

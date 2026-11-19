@@ -80,6 +80,44 @@ export function describeAuthorNameProblem(name) {
   return bad === undefined ? '不符合 GitHub 用户名规则' : '含字符 ' + JSON.stringify(bad) + ',只允许字母、数字与连字符'
 }
 
+/**
+ * 找出 catalog 下仅大小写不同的作者目录。
+ * GitHub 用户名不区分大小写,`Alice` 与 `alice` 指向同一个用户,只能保留一个目录。
+ * @param {string} catalogDir catalog 根目录
+ * @returns {string[][]} 每组冲突的目录名,组内按字典序排序,组间按首项排序
+ */
+export function findAuthorNameCollisions(catalogDir) {
+  if (!isDirectory(catalogDir)) return []
+  const groups = new Map()
+  for (const entry of readdirSync(catalogDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue
+    const key = entry.name.toLowerCase()
+    const names = groups.get(key)
+    if (names) names.push(entry.name)
+    else groups.set(key, [entry.name])
+  }
+  const collisions = []
+  for (const names of groups.values()) {
+    if (names.length < 2) continue
+    collisions.push([...names].sort())
+  }
+  return collisions.sort((left, right) => (left[0] < right[0] ? -1 : 1))
+}
+
+/**
+ * 说明一组仅大小写不同的作者目录冲突,报错文本直接点名冲突的两个目录。
+ * @param {string[]} names 仅大小写不同的目录名
+ * @returns {string} 报错文本
+ */
+export function describeAuthorNameCollision(names) {
+  const dirs = names.map((name) => 'catalog/' + name)
+  return (
+    'catalog 下出现仅大小写不同的作者目录:' + dirs.join(' 与 ') +
+    ';GitHub 用户名不区分大小写,这些目录属于同一个用户 ' + names[0] +
+    ',必须只保留一个目录并删除其余目录后重新提交'
+  )
+}
+
 /** 按 x.y.z 比较两个版本号,返回负数表示 a 小于 b。 */
 export function compareVersions(left, right) {
   const a = left.split('.').map(Number)
@@ -161,6 +199,9 @@ export function readCatalog({ catalogDir, problems, checkAuthorNames = true }) {
   }
   const entries = readdirSync(catalogDir, { withFileTypes: true }).sort((left, right) => (left.name < right.name ? -1 : 1))
   const seenPlugins = new Set()
+  for (const names of findAuthorNameCollisions(catalogDir)) {
+    problems.push(problem('error', 'AUTHOR_NAME_COLLISION', describeAuthorNameCollision(names), 'catalog/' + names[0]))
+  }
   for (const entry of entries) {
     if (!entry.isDirectory()) {
       if (!CATALOG_ROOT_FILES.includes(entry.name)) {

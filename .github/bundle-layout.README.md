@@ -8,8 +8,8 @@
 
 `plugins/<author>/`
 
-- 目录名即作者用户名,必须与 `datalog.json` 的 `author`、`plugins/author_manifest.json` 的 `username` 完全一致。
-- 作者名按 GitHub 用户名规则校验,字母不区分大小写:只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符。构建与仓库级校验都按这条规则检查,不合法时报错并指出是哪个目录。
+- 目录名即作者用户名,必须与 `plugins.json` 的 `author`、`plugins/author_manifest.json` 的 `username` 完全一致。
+- 作者名按 GitHub 用户名规则校验,字母不区分大小写:只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符。构建与仓库级校验都按这条规则检查,不合法时报错并指出是哪个目录。同一个用户的目录只能出现一次:`Alice` 与 `alice` 仅大小写不同,属同一个 GitHub 用户,构建与仓库级校验都会报错并点名冲突的两个目录。
 
 | 文件 | 必需 | 说明 |
 |:---:|:---:|:---:|
@@ -57,7 +57,7 @@ CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范
 
 | 字段 | 类型 | 说明 |
 |:---:|:---:|:---:|
-| `name` | string | 插件名,与 `datalog.json` 的 `plugin_name` 一致 |
+| `name` | string | 插件名,与 `plugins.json` 的 `plugin_name` 一致 |
 | `version` | string | 三段语义化版本号,与目录名一致 |
 | `license` | string | SPDX 标识符,例如 MIT |
 | `description` | object | 至少包含 `zh-CN` 或 `en-US` 之一 |
@@ -65,7 +65,7 @@ CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范
 | `repo_link` | string | 源码仓库链接 |
 | `dependencies` | object | 仅允许 `dsc` 一个键,值为 semver range |
 
-校验脚本强制 `name` 与 `version` 分别与 `datalog.json`、目录名一致;其余字段由分发规范 v2 要求,市场展示插件时读取。
+校验脚本强制 `name` 与 `version` 分别与 `plugins.json`、目录名一致;其余字段由分发规范 v2 要求,市场展示插件时读取。
 
 ## 清单
 
@@ -105,4 +105,4 @@ plugins/
         plugin.js.author.sig
 ```
 
-pages 包根目录另有 `meta.json`、`tags.json`、`datalog.json`,以及 L1 清单 `manifest.json` 与 `manifest.json.sig`,含义见根目录 [README](../README.md)。仓库内不存放 `eec.pem`,合集证书只在 `certs/awesome-dsc-plugin-eec.crt`。
+pages 包根目录另有 `meta.json`、`tags.json`、`plugins.json`,以及 L1 清单 `manifest.json` 与 `manifest.json.sig`,含义见根目录 [README](../README.md)。仓库内不存放 `eec.pem`,合集证书只在 `certs/awesome-dsc-plugin-eec.crt`。

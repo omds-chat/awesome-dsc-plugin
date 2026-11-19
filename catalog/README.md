@@ -16,7 +16,7 @@ catalog/
 ```
 
 - `<作者>` 是目录名,必须与 `author.json` 的 `username` 逐字符一致,也是分发站点里 `plugins/<作者>/` 的目录名。
-- `<作者>` 按 GitHub 用户名规则校验,字母不区分大小写:只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符。不合法时仓库级校验与构建都报错,并指出是哪个目录。
+- `<作者>` 按 GitHub 用户名规则校验,字母不区分大小写:只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符。不合法时仓库级校验与构建都报错,并指出是哪个目录。同一个用户的目录只能出现一次:`Alice` 与 `alice` 仅大小写不同,属同一个 GitHub 用户,仓库级校验与构建都会报错并点名冲突的两个目录。
 - `<插件>` 是目录名,必须是 `plugin.json` 的 `name` 去掉 `@scope/` 后的部分:`dsc-demo` 与 `@alice/dsc-demo` 都写作 `dsc-demo`,两者不一致会被拒绝。
 - 目录与文件名固定,不要改名。作者名的合法字符不区分大小写,但 `author.json` 的 `username` 必须与目录名逐字符一致(含大小写),改名时两处要一起改。
 - 结构就是上面这四层,不要创建占位目录、空目录或版本目录:版本不进 catalog,由 CI 从 `base_url` 发现。
@@ -95,7 +95,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 | `integration` | 接入外部服务与第三方平台。 |
 | `security` | 提升本地数据与通信安全的防护。 |
 
-- 构建时 `datalog.json` 的 `tag` 直接取自各插件 `plugin.json` 的 `tags`,省略时为空数组。
+- 构建时插件目录索引 `plugins.json` 的 `tag` 直接取自各插件 `plugin.json` 的 `tags`,省略时为空数组。
 - 标签不在预设清单内按构建错误处理:构建中止,并指出是哪个插件、哪个标签;不会静默丢弃或自动补标签。
 - 要新增标签,先在 `site/tags.json` 里登记,再在插件里使用,两者在同一个 PR 里提交。
 
@@ -123,7 +123,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 3. 用合集 EEC 给每个版本的 `plugin.js` 重新签名,产出 `plugin.js.sig`;作者的 `plugin.js.author.sig` 原样保留。
 4. 把公钥、版本列表、各版本元数据写入 pages 包的 `plugins/` 目录,把 `catalog` 与 `certs` 复制进 pages,再生成 L1、L2、L3 三层清单与清单签名。
 5. 生成 pages 包 `catalog/` 下的两份汇总文件:`index.json`(作者列表与插件列表,含当前版本、标签与版本数)与 `anomalies.json`(本次发布被剔除的插件)。
-6. 用 `scripts/verify-catalog-consistency.mjs` 交叉校验 `catalog/index.json`、`datalog.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止。
+6. 用 `scripts/verify-catalog-consistency.mjs` 交叉校验 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止。
 7. 每次 Release 全量重建 pages 并直接替换,不做版本留存;L1 的 `revision` 从已发布站点的 `manifest.json` 读上一次的值加一,取不到时从 1 开始。
 8. `catalog` 与 `certs` 随 pages 分发,但不进任何一层清单,它们是登记信息与信任材料。
 

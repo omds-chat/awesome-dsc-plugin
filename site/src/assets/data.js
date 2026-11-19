@@ -6,7 +6,7 @@
  * 作者与插件列表的来源优先级:
  *   1. catalog/index.json             可选索引,存在即以其为准;
  *   2. plugins/author_manifest.json   每个 pages 包都写出的作者清单;
- *   3. datalog.json                   兜底,只提供作者名与插件名。
+ *   3. plugins.json                   兜底,只提供作者名与插件名。
  * 插件展示字段来自 catalog/<作者>/<插件>/plugin.json,缺失时回落到最新版本的 meta.json。
  * 版本列表来自 plugins/<作者>/<插件>/versions.json。
  * 签名材料只做文件存在性探测,不做任何密码学运算。
@@ -19,7 +19,7 @@ export const UNKNOWN = "unknown";
 export const PATHS = {
   catalogIndex: "catalog/index.json",
   authorManifest: "plugins/author_manifest.json",
-  datalog: "datalog.json",
+  pluginIndex: "plugins.json",
   l1Manifest: "manifest.json",
   l1Signature: "manifest.json.sig",
   authorJson: function (author) {
@@ -214,7 +214,7 @@ async function resolvePlugin(author, name, hint) {
   };
 }
 
-async function resolveAuthor(entry, datalog) {
+async function resolveAuthor(entry, pluginIndex) {
   const username = entry.username;
   const names = [];
   if (Array.isArray(entry.plugins) && entry.plugins.length > 0) {
@@ -225,8 +225,8 @@ async function resolveAuthor(entry, datalog) {
       for (const name of manifest.data) {
         if (typeof name === "string" && name.length > 0) names.push(name);
       }
-    } else if (Array.isArray(datalog)) {
-      for (const record of datalog) {
+    } else if (Array.isArray(pluginIndex)) {
+      for (const record of pluginIndex) {
         if (record !== null && typeof record === "object" && record.author === username && typeof record.plugin_name === "string") {
           names.push(record.plugin_name);
         }
@@ -282,7 +282,7 @@ export async function loadCollection() {
       }),
     };
   }
-  const [manifest, datalog] = await Promise.all([readJson(PATHS.authorManifest), readJson(PATHS.datalog)]);
+  const [manifest, pluginIndexResult] = await Promise.all([readJson(PATHS.authorManifest), readJson(PATHS.pluginIndex)]);
   const entries = [];
   const seen = new Set();
   if (manifest.status === PRESENT && Array.isArray(manifest.data)) {
@@ -293,18 +293,18 @@ export async function loadCollection() {
       entries.push({ username: record.username, profile: typeof record.profile === "string" ? record.profile : "", plugins: null });
     }
   }
-  const datalogRecords = datalog.status === PRESENT && Array.isArray(datalog.data) ? datalog.data : [];
-  for (const record of datalogRecords) {
+  const pluginIndexRecords = pluginIndexResult.status === PRESENT && Array.isArray(pluginIndexResult.data) ? pluginIndexResult.data : [];
+  for (const record of pluginIndexRecords) {
     if (record === null || typeof record !== "object" || typeof record.author !== "string") continue;
     if (seen.has(record.author)) continue;
     seen.add(record.author);
     entries.push({ username: record.author, profile: "", plugins: null });
   }
   const authors = [];
-  for (const entry of entries) authors.push(await resolveAuthor(entry, datalogRecords));
+  for (const entry of entries) authors.push(await resolveAuthor(entry, pluginIndexRecords));
   const sources = [];
   if (manifest.status === PRESENT) sources.push("plugins/author_manifest.json");
-  if (datalog.status === PRESENT) sources.push("datalog.json");
+  if (pluginIndexResult.status === PRESENT) sources.push("plugins.json");
   return {
     source: sources.length > 0 ? sources.join(" 与 ") : "未找到作者索引",
     l1Manifest: l1Manifest,

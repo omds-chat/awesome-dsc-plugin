@@ -21,7 +21,8 @@
     "build": "node scripts/build-from-catalog.mjs --catalog catalog --certs certs --site site/dist --out dist/pages",
     "build:site": "pnpm --dir site build",
     "verify:consistency": "node scripts/verify-catalog-consistency.mjs --dir dist/pages",
-    "report:anomalies": "node scripts/report-build-anomalies.mjs --anomalies dist/pages/catalog/anomalies.json"
+    "report:anomalies": "node scripts/report-build-anomalies.mjs --anomalies dist/pages/catalog/anomalies.json",
+    "check": "node scripts/check-all.mjs"
   },
   "keywords": [
     "dsc",
