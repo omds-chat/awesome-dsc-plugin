@@ -15,7 +15,7 @@
 | [site/README.md](../site/README.md) | 站点工程说明 | 合集设置的唯一位置、页面读取顺序与逐级回落、构建与展示约定 | 改站点、排查页面数据缺失或显示异常 | 维护者 |
 | [docs/design/collection-pipeline.md](design/collection-pipeline.md) | 流水线机制与取舍的设计说明 | catalog 驱动模型、三层清单职责与 revision 语义、清单入库与归档分支、证书位置、异常剔除、站点关系、与内部合集的差异、已否决方案、未定稿项 | 判断「为什么这样定」「这样改会不会破坏既有取舍」、评估机制变更的影响面 | 维护者、Agent |
 | [docs/design/pages-artifacts.md](design/pages-artifacts.md) | pages 包逐文件职责说明 | 每个文件的生成者、消费者、签名归属、随发布是否更新与体积增长来源 | 判断某个文件能不能当作插件信息入口、调整产物清单与签名归属 | 维护者、Agent |
-| [docs/index.md](index.md) | 本索引 | 文档主表、冲突时的优先级、文档分层、维护约定 | 找文档、判断该读哪一份、新增或删除文档时 | Agent、维护者 |
+| [docs/README.md](index.md) | 本索引 | 文档主表、冲突时的优先级、文档分层、维护约定 | 找文档、判断该读哪一份、新增或删除文档时 | Agent、维护者 |
 
 ## 二、冲突时以谁为准
 

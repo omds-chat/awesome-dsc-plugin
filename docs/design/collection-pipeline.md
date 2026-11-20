@@ -402,7 +402,7 @@
 | `schemas/README.md` | 各份 JSON Schema 的约束对象与边界 |
 | `site/README.md` | 站点工程的数据来源、构建与展示约定 |
 | `docs/design/pages-artifacts.md` | pages 包逐文件的生成者、消费者、签名归属与体积增长来源 |
-| `docs/index.md` | 全部文档的索引入口、冲突时的优先级、文档分层与维护约定 |
+| `docs/README.md` | 全部文档的索引入口、冲突时的优先级、文档分层与维护约定 |
 
 - 合集骨架与命名规则的规范来源是合集模板仓库 `awesome-dsc-plugin-set-template`，本仓库跟随其规则，并另有 catalog 层的 schema 是模板没有的。
 - 字段取值以各 schema 与脚本为准；本文与上述文档冲突时，以仓库代码与 README 为准，并应回改本文。
