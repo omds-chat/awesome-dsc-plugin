@@ -141,7 +141,7 @@ DeepSeek-Chat-Enhanced 仓库(根 CA,离线)
 | EEC 密钥 | ECDSA P-256;OpenSSL 的 CMS 实现对 Ed25519 报 `provider signature failure`,不可用 |
 | EEC 证书 | 由根 CA 签发,`keyUsage=critical,digitalSignature`,`basicConstraints=critical,CA:FALSE`,有效期 365 天 |
 | 合集签名 | CMS 分离签名,`openssl cms -sign -binary -md sha512 -outform DER -nocerts -noattr`,产物为同名的 `.sig` 文件;签名与验签都带 `-binary`,按原始字节处理,不经换行规范化;产物固定为 DER,验签带 `-inform DER` |
-| 作者签名 | 裸公钥分离签名,`openssl pkeyutl -sign -rawin`,作者密钥为 Ed25519 |
+| 作者签名 | 裸公钥分离签名,`openssl pkeyutl -sign -rawin`,作者密钥为 Ed25519;验签失败只警告,不阻断收录 |
 
 两条曲线都是硬约束,不是偏好:换成 Ed25519 会让证书链校验或 CMS 验签在目标浏览器与 OpenSSL 上直接失败。
 
@@ -178,6 +178,10 @@ openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -conten
 
 作者签名是可选项。作者不签名时,该版本只有本仓库的 EEC 签名。
 
+作者签名从不阻断收录:验签失败、公钥与签名两侧不齐,都只在报告与日志里警告。理由是作者层只是附加证据——合集已经在登记侧审核过作者与插件,依据是 `catalog/` 的 PR 审核与仓库级校验;作者签名回答的是「作者是否签过这一份」,不改变收录结论。既然它不参与收录判定,就没有理由用它把已经审核过的内容拦下来。
+
+公钥与签名两侧缺一不可:只有 `plugin.js.author.sig` 没有 `author_pub.pem`,或只有 `author_pub.pem` 没有 `plugin.js.author.sig`,都判为「未校验」,不计为通过。前者是有签名但无公钥,验不了;后者是有公钥但无签名,没得验。两种情形都没有可用证据,不能把「没验过」写成「验过了」。
+
 ### 校验规则
 
 `pnpm verify:bundle` 对构建出的 pages 包逐项检查,任一错误都以非零退出码结束并一次性列出全部问题,每条都带层号与文件路径。
@@ -188,7 +192,7 @@ openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -conten
 | 2 | 插件目录索引 `plugins.json` 中的每个插件都在 `plugins/<author>/plugin_manifest.json` 中出现,且插件目录存在 |
 | 3 | 每个插件目录有 `versions.json`,`latest` 必须在 `versions` 列表内 |
 | 4 | 每个版本目录有 `meta.json`、`plugin.js`、`plugin.js.sig`,并用 `openssl cms -verify -binary -md sha512 -inform DER -CAfile <根证书> -certfile certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 验签,失败即报错 |
-| 5 | 若版本目录存在 `plugin.js.author.sig`,则 `plugins/<author>/author_pub.pem` 必须存在,并用 `openssl pkeyutl -verify` 验证,失败即报错;其它 `*.author.sig` 不参与校验 |
+| 5 | 作者签名是可选证据,只警告、不阻断:版本目录出现 `plugin.js.author.sig` 且 `plugins/<author>/author_pub.pem` 可用时,用 `openssl pkeyutl -verify -pubin -rawin -inkey <公钥> -in plugin.js -sigfile plugin.js.author.sig` 校验,失败只记警告;只有签名没有公钥、或只有公钥没有签名,都判为「未校验」,不计为通过;其它 `*.author.sig` 不参与校验 |
 | 6 | `tags.json` 存在时,插件目录索引 `plugins.json` 的 `tag` 必须取自其中 |
 | 7 | 三层清单存在且结构合法:`schemaVersion` 为 1,`revision` 为正整数,`files` 为非空数组,条目只含 `path` 与 `sha512` |
 | 8 | 清单条目的 `path` 合法:正斜杠、相对路径、不含 `..`、不指向清单自身、不重复 |
@@ -198,8 +202,8 @@ openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -conten
 
 ### 校验语义
 
-- 本仓库发布前的校验是强校验:`scripts/build-from-catalog.mjs` 与 CI 的每一步遇到错误都以非零退出码中止,不合规的内容不会被分发。仓库级校验 `pnpm verify:catalog` 只查 `catalog/` 与 `certs/` 的结构与证书材料,不要求任何构建产物;pages 包的强校验是 `pnpm verify:bundle`,三层清单、清单签名、产物签名与收录信息交叉一致性都在这一步检查,不给根证书时证书链与签名降级为警告,结构与哈希照常校验。要临时放开清单缺失,可对 `scripts/verify-collection.mjs` 直接加 `--allow-missing-manifest`。
-- 分发出去之后的校验是弱校验:插件市场对网页文件签名、插件签名、证书链校验失败只警告,不阻断,不做兜底。警告由用户决定是否继续,市场不会替用户静默放行。
+- 本仓库发布前的校验是强校验:`scripts/build-from-catalog.mjs` 与 CI 的每一步遇到错误都以非零退出码中止,不合规的内容不会被分发。仓库级校验 `pnpm verify:catalog` 只查 `catalog/` 与 `certs/` 的结构与证书材料,不要求任何构建产物;pages 包的强校验是 `pnpm verify:bundle`,三层清单、清单签名、产物签名与收录信息交叉一致性都在这一步检查;作者签名不在强校验之内,验签失败与两侧不齐只警告,不改变退出码。要临时放开清单缺失,可对 `scripts/verify-collection.mjs` 直接加 `--allow-missing-manifest`。不给根证书时无法校验证书链,`verify-collection.mjs` 报 `ROOT_CA_MISSING` 错误并以非零退出码结束,结构与哈希检查照常执行;只做结构与哈希检查时加 `--allow-placeholder-eec`(骨架模式,证书链与签名降级为警告)。
+- 分发出去之后的校验是弱校验:插件市场对网页文件签名、插件签名、证书链校验失败只警告,不阻断,不做兜底。作者签名同理,失败只警告。警告由用户决定是否继续,市场不会替用户静默放行。
 - 签名覆盖文件原始字节。换行、缩进或空白的任何改动都会让校验失败,仓库统一使用 LF。
 
 ### 如何申请 EEC
@@ -355,7 +359,7 @@ awesome-dsc-plugin/
 ## 收录流程
 
 1. 提交 PR,在 `catalog/` 登记插件:`catalog/<作者>/author.json`、`catalog/<作者>/author_pub.pem`、`catalog/<作者>/<插件>/plugin.json`。字段、schema 与提交校验见 [catalog/README.md](catalog/README.md)。
-2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。
+2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。作者签名取不到或为空按没有签名处理,只记警告,不影响该插件收录。
 3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,插件目录索引 `plugins.json` 由 catalog 生成,`catalog/`(含 `removed.json`,本次剔除的作者与插件不在其中)与 `certs/` 复制进来,再在 `catalog/` 下写入 `index.json` 与 `anomalies.json`,并按层生成、签名 L1、L2、L3 三层清单。
 4. 交叉校验:`scripts/verify-catalog-consistency.mjs` 比对 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止并列出差异。
 5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,全部通过后整体替换已发布站点,不做版本留存。
@@ -405,11 +409,11 @@ catalog/<作者>/
 | 7 | `<base_url>/plugins/<author>/<plugin>/versions.json` | 取版本列表与最新版本号 |
 | 8 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/meta.json` | 取插件元数据,与 L3 清单记录的摘要比对 |
 | 9 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/plugin.js` 与 `plugin.js.sig` | 取插件运行时脚本,用合集证书验签 |
-| 10 | `<base_url>/plugins/<author>/author_pub.pem` 与 `plugin.js.author.sig` | 有作者签名时,取作者公钥与签名 |
+| 10 | `<base_url>/plugins/<author>/author_pub.pem` 与 `plugin.js.author.sig` | 有作者签名时,取作者公钥与签名;校验失败只警告,不计为通过 |
 
 任何一项校验失败只提示警告,不阻断插件加载,与「校验语义」一节的弱校验一致。
 
-`catalog/index.json` 是给站点与外部查阅用的汇总索引:作者列表(`username`、`profile`、插件数)与插件列表(作者、名称、描述、许可证、仓库链接、当前版本、标签、版本数)。它由构建按本次实际收录范围生成,不属于分发完整性的一部分,也不进任何清单;市场可以直接读它,也可以继续按上表逐层取用。
+`catalog/index.json` 只供本站站点自己展示:作者列表(`username`、`profile`、插件数)与插件列表(作者、名称、描述、许可证、仓库链接、当前版本、标签、版本数),站点读不到它时回落到 `plugins/author_manifest.json` 与 `plugins.json`。它不是市场省请求的入口,市场不得依赖它加载目录数据;也不要用聚合索引替代按层取件——聚合索引把登记信息压成一份派生数据,不进任何清单、不参与验签,一旦与三层清单不一致,市场就拿不到可用于校验的摘要,而逐层取件才对得上「这一层有哪些文件、摘要是什么」。
 
 ## 跨域访问
 
@@ -435,7 +439,8 @@ pnpm build           # 需要 EEC_SECRET_KEY 与 ROOT_CA_PATH:按 catalog 组装
 pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 ```
 
-- 没有根证书时,`pnpm verify:bundle` 仍会校验结构与逐个文件的 SHA-512,只把证书链与签名降级为警告;设置 `ROOT_CA_PATH` 或传 `--root-ca` 才是完整校验。
+- 没有根证书时,证书链无法校验,`verify-collection.mjs` 报 `ROOT_CA_MISSING` 错误并以非零退出码结束,结构与逐个文件的 SHA-512 检查照常完成;要让证书链与签名降级为警告,对 `scripts/verify-collection.mjs` 加 `--allow-placeholder-eec`(骨架模式)。设置 `ROOT_CA_PATH` 或传 `--root-ca` 才是完整校验。
+- 作者签名不改变退出码:验签失败、公钥与签名两侧不齐都只警告,不影响 `verify:bundle` 的通过与否。
 - `pnpm build` 等价于直接调用 `scripts/build-from-catalog.mjs`,本地复现的完整形式:
 
   ```bash

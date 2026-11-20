@@ -14,11 +14,13 @@
 | 文件 | 必需 | 说明 |
 |:---:|:---:|:---:|
 | `plugin_manifest.json` | 是 | 该作者的插件名数组,例如 `["dsc-demo"]` |
-| `author_pub.pem` | 否 | 作者公钥,OpenSSL PEM,Ed25519。版本目录出现 `plugin.js.author.sig` 时必须存在 |
+| `author_pub.pem` | 否 | 作者公钥,OpenSSL PEM,Ed25519。与 `plugin.js.author.sig` 配对校验:只有签名没有公钥、或只有公钥没有签名,都判为未校验,只警告 |
 | `manifest.json` | 是 | L2 清单,覆盖本目录的 `author_pub.pem` 与 `plugin_manifest.json`,文件存在才覆盖 |
 | `manifest.json.sig` | 是 | L2 清单的 CMS 分离签名,由 EEC 生成 |
 
-作者公钥由插件作者提供,登记在 `catalog/<作者>/author_pub.pem`,构建时复制到 pages 包的 `plugins/<作者>/author_pub.pem`。不要在合集里手工生成。缺失时校验只给警告,该作者的插件便不能带作者签名。
+作者公钥由插件作者提供,登记在 `catalog/<作者>/author_pub.pem`,构建时复制到 pages 包的 `plugins/<作者>/author_pub.pem`。不要在合集里手工生成。缺失时校验只给警告,该作者带 `plugin.js.author.sig` 的版本判为未校验。
+
+作者层只是附加证据:合集已在登记侧审核过作者与插件,作者签名从不阻断收录,验签失败也只警告。公钥与签名两侧缺一不可,只有一侧不算通过。
 
 ## 插件目录
 
@@ -47,7 +49,7 @@
 | `meta.json` | 是 | 无 | 插件运行时元数据,由 L3 清单覆盖,不再单独签名 |
 | `plugin.js` | 是 | 无 | 插件运行时脚本,单文件 ESM,使用 LF 换行 |
 | `plugin.js.sig` | 是 | 本仓库 EEC | `plugin.js` 的 CMS 分离签名,由 CI 的 `build-from-catalog.mjs` 重新生成 |
-| `plugin.js.author.sig` | 否 | 插件作者 | `plugin.js` 的裸公钥分离签名,随插件产物提供,存在时用 `plugins/<author>/author_pub.pem` 校验 |
+| `plugin.js.author.sig` | 否 | 插件作者 | `plugin.js` 的裸公钥分离签名,随插件产物提供。与 `plugins/<author>/author_pub.pem` 配对:两侧齐全才用 `openssl pkeyutl -verify` 校验,验签失败只警告;只有一侧时判为未校验 |
 
 `meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖;若作者沿用 `dsc-plugin-template` 的产物,该模板会一并产出 `meta.json.author.sig`,本仓库不收录这个文件。
 

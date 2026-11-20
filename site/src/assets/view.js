@@ -192,7 +192,7 @@ export function buildDetail(entry, options) {
     row.append(cell("meta.json", statusChip(record.metaStatus)));
     row.append(cell("plugin.js", statusChip(record.bundle)));
     row.append(cell("plugin.js.sig", statusChip(record.bundleSignature)));
-    row.append(cell("作者签名", statusChip(record.authorSignature)));
+    row.append(cell("作者签名文件", statusChip(record.authorSignature)));
     return row;
   });
   stack.append(
@@ -204,7 +204,7 @@ export function buildDetail(entry, options) {
         { label: "meta.json", width: "14%" },
         { label: "plugin.js", width: "14%" },
         { label: "plugin.js.sig", width: "16%" },
-        { label: "作者签名", width: "14%" },
+        { label: "作者签名文件", width: "14%" },
       ],
       versionRows,
       "compact",
@@ -244,7 +244,7 @@ export function buildDetail(entry, options) {
       "compact signature-table",
     ),
   );
-  stack.append(el("p", "detail-note", "以上状态只表示对应文件是否存在,未做任何密码学计算,不代表已验签。"));
+  stack.append(el("p", "detail-note", "以上状态只表示对应文件是否存在,未做任何密码学计算,不代表已验签;作者公钥与作者签名两侧缺一,只算未校验,不算通过。"));
   return stack;
 }
 

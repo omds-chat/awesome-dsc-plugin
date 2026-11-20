@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://omds-chat.github.io/awesome-dsc-plugin/schemas/catalog-index.schema.json",
   "title": "dsc-plugin-collection-catalog-index",
-  "description": "pages 包 catalog/index.json 的结构。由构建按本次实际收录的作者与插件生成,供站点与外部查阅使用;被剔除的插件不进入本文件。",
+  "description": "pages 包 catalog/index.json 的结构。由构建按本次实际收录的作者与插件生成,只供本站站点自己展示,不作为市场省请求的入口,市场不得依赖它加载目录数据;被剔除的插件不进入本文件。",
   "type": "object",
   "properties": {
     "schemaVersion": {

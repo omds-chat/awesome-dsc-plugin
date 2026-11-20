@@ -10,6 +10,7 @@
  *
  * 校验语义(见 .agents/signing-conventions.md 第六节):本脚本是发布前的强校验,
  * 任一项失败都以非零退出码结束;插件市场一侧的同类校验失败只警告,不阻断。
+ * 作者签名是唯一的例外:它是可选证据,校验失败或公钥与签名两侧不齐都只警告,从不阻断收录。
  */
 import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
@@ -57,6 +58,36 @@ export const LAYER2_FILES = ['author_pub.pem', 'plugin_manifest.json']
 export const LAYER3_FILES = ['versions.json']
 /** L3 明确不覆盖的产物本体,由每版本的 plugin.js.sig 独立签名 */
 export const LAYER3_EXCLUDED_FILES = ['plugin.js', 'plugin.js.sig']
+
+/**
+ * 作者签名的判定结果。
+ *
+ * 作者层只是附加证据:合集已在登记侧审核过作者与插件,作者签名从不阻断收录,
+ * 因此这里只区分「有没有可用的证据」,没有一项会升级为错误。
+ * 公钥与签名两侧缺一不可:任一侧缺失都判为「未校验」,不得判为通过。
+ */
+export const AUTHOR_SIGNATURE_VERDICT = {
+  verified: '通过',
+  failed: '未通过',
+  unpaired: '未校验',
+  unsigned: '未校验',
+  absent: '未校验',
+}
+
+/**
+ * 判定一个版本的作者签名配对状态。公钥与签名两侧缺一不可:
+ *   - 两侧都在:验通为 verified,验败为 failed;
+ *   - 只有 plugin.js.author.sig、没有可用公钥:unpaired,判为未校验;
+ *   - 只有公钥、没有 plugin.js.author.sig:unsigned,判为未校验;
+ *   - 两侧都没有:absent,判为未校验。
+ * @param {{hasSignature: boolean, hasPublicKey: boolean, verified: boolean}} input 配对输入
+ * @returns {'verified'|'failed'|'unpaired'|'unsigned'|'absent'}
+ */
+export function classifyAuthorSignature({ hasSignature, hasPublicKey, verified }) {
+  if (!hasSignature) return hasPublicKey ? 'unsigned' : 'absent'
+  if (!hasPublicKey) return 'unpaired'
+  return verified ? 'verified' : 'failed'
+}
 
 export { MANIFEST_FILE, VERSION_SIGNED_FILES, VERSION_AUTHOR_SIGNED_FILES }
 
@@ -372,7 +403,13 @@ export function resolveRootCaPath(options = {}, env = process.env) {
 export function verifyCollection(collectionDir, options = {}) {
   const root = resolve(collectionDir)
   const problems = []
-  const stats = { authors: 0, plugins: 0, versions: 0, manifests: [] }
+  const stats = {
+    authors: 0,
+    plugins: 0,
+    versions: 0,
+    manifests: [],
+    authorSignatures: { verified: 0, failed: 0, unpaired: 0, unsigned: 0, absent: 0 },
+  }
   const report = {
     error(code, message, path) {
       problems.push({ level: 'error', code, message, path: path ?? null })
@@ -615,7 +652,11 @@ function inspectAuthor({ root, author, report, stats }) {
   const pubPath = join(authorDir, AUTHOR_PUB_FILE)
   let publicKeyUsable = false
   if (!isFile(pubPath)) {
-    report.warn('AUTHOR_PUB_MISSING', '作者公钥不存在:' + pubRel + ',该作者的插件不能带作者签名', pubRel)
+    report.warn(
+      'AUTHOR_PUB_MISSING',
+      '作者公钥不存在:' + pubRel + ',该作者的作者签名一律判为未校验(作者层只警告,不阻断收录)',
+      pubRel,
+    )
   } else {
     try {
       const info = describePublicKey(pubPath)
@@ -690,6 +731,8 @@ function inspectPlugin({ authorContext, entry, report, stats, rootCaPath, eecPat
     report.error('LATEST_NOT_LISTED', versionsRel + ' 的 latest ' + versionsData.latest + ' 不在 versions 列表内', versionsRel)
   }
 
+  /** 各版本的作者签名判定结果,循环结束后按插件汇总一次 */
+  const authorSignatures = []
   for (const version of versionList) {
     if (typeof version !== 'string') continue
     const versionRel = pluginRel + '/' + version
@@ -705,8 +748,24 @@ function inspectPlugin({ authorContext, entry, report, stats, rootCaPath, eecPat
       }
     }
     inspectVersionMeta({ versionDir, versionRel, version, pluginName: entry.plugin_name, report })
-    inspectVersionSignatures({ versionDir, versionRel, report, rootCaPath, eecPath, cmsReady, authorPubPath: pubPath, authorPubRel: pubRel, authorPubUsable: publicKeyUsable, author })
+    authorSignatures.push(
+      inspectVersionSignatures({
+        version,
+        versionDir,
+        versionRel,
+        report,
+        rootCaPath,
+        eecPath,
+        cmsReady,
+        authorPubPath: pubPath,
+        authorPubRel: pubRel,
+        authorPubUsable: publicKeyUsable,
+        author,
+        stats,
+      }),
+    )
   }
+  reportAuthorSignatureCoverage({ pluginRel, statuses: authorSignatures, report })
 }
 
 function inspectVersionMeta({ versionDir, versionRel, version, pluginName, report }) {
@@ -726,7 +785,12 @@ function inspectVersionMeta({ versionDir, versionRel, version, pluginName, repor
   }
 }
 
-function inspectVersionSignatures({ versionDir, versionRel, report, rootCaPath, eecPath, cmsReady, authorPubPath, authorPubRel, authorPubUsable, author }) {
+/**
+ * 校验一个版本的合集 CMS 签名与作者签名,返回作者签名的判定结果。
+ * 作者签名可选,从不阻断收录:验败只警告,公钥与签名两侧缺一都判为未校验。
+ * @returns {{version: string, status: string}} 该作者签名判定结果
+ */
+function inspectVersionSignatures({ version, versionDir, versionRel, report, rootCaPath, eecPath, cmsReady, authorPubPath, authorPubRel, authorPubUsable, author, stats }) {
   // 合集 CMS 签名:版本目录只剩 plugin.js.sig,meta.json 由 L3 清单覆盖
   for (const name of VERSION_SIGNED_FILES) {
     const filePath = join(versionDir, name)
@@ -745,26 +809,69 @@ function inspectVersionSignatures({ versionDir, versionRel, report, rootCaPath, 
     }
   }
 
-  // 作者分离签名:可选,存在即必须能验通
+  // 作者分离签名:可选证据,只警告不阻断。公钥与签名两侧缺一不可,单侧缺失判为未校验
+  let authorSignature = { version, status: 'absent' }
   for (const name of VERSION_AUTHOR_SIGNED_FILES) {
     const filePath = join(versionDir, name)
     if (!isFile(filePath)) continue
     const authorSigPath = authorSignaturePath(filePath)
-    if (!isFile(authorSigPath)) continue
     const authorRel = versionRel + '/' + name + '.author.sig'
-    if (!authorPubUsable) {
-      report.error(
-        'AUTHOR_PUB_MISSING',
-        authorRel + ' 存在,但 ' + authorPubRel + ' 缺失或不可用,无法校验作者签名',
+    const hasSignature = isFile(authorSigPath)
+    let verified = false
+    let reason = null
+    if (hasSignature && authorPubUsable) {
+      const result = verifyFileAuthor(filePath, authorSigPath, authorPubPath)
+      verified = result.ok
+      reason = result.reason
+    }
+    const status = classifyAuthorSignature({ hasSignature, hasPublicKey: authorPubUsable, verified })
+    authorSignature = { version, status }
+    stats.authorSignatures[status] += 1
+    if (status === 'unpaired') {
+      report.warn(
+        'AUTHOR_SIGN_UNPAIRED',
+        authorRel + ' 存在,但 ' + authorPubRel + ' 缺失或不可用:只有签名没有公钥,作者签名判为' +
+          AUTHOR_SIGNATURE_VERDICT.unpaired + ',不计为通过;作者层只警告,不阻断收录',
         authorRel,
       )
-      continue
-    }
-    const result = verifyFileAuthor(filePath, authorSigPath, authorPubPath)
-    if (!result.ok) {
-      report.error('AUTHOR_SIGN_FAILED', authorRel + ' 校验失败,作者 ' + author + ' 的签名与文件不匹配:' + String(result.reason), authorRel)
+    } else if (status === 'failed') {
+      report.warn(
+        'AUTHOR_SIGN_FAILED',
+        authorRel + ' 校验失败,作者 ' + author + ' 的签名与文件不匹配,作者签名判为' +
+          AUTHOR_SIGNATURE_VERDICT.failed + ',仅警告不阻断收录:' + String(reason),
+        authorRel,
+      )
     }
   }
+  return authorSignature
+}
+
+/**
+ * 按插件汇总作者签名的覆盖情况。
+ *
+ * 作者签名可选,因此「只有公钥、没有签名」不逐版本刷警告,只在插件层汇总一条:
+ * 这些版本判为未校验,不计为通过。理由见 README「作者自签名」一节:
+ * 合集已在登记侧审核过作者与插件,作者签名只是附加证据,不阻断收录。
+ * @param {object} context 上下文
+ * @param {string} context.pluginRel 插件目录相对路径
+ * @param {Array<{version: string, status: string}>} context.statuses 各版本的判定结果
+ * @param {object} context.report 报告器
+ * @returns {void}
+ */
+function reportAuthorSignatureCoverage({ pluginRel, statuses, report }) {
+  const unsigned = statuses.filter((item) => item.status === 'unsigned').map((item) => item.version)
+  if (unsigned.length === 0) return
+  const signed = statuses.filter((item) => item.status === 'verified' || item.status === 'failed').length
+  const detail =
+    signed === 0
+      ? '全部 ' + unsigned.length + ' 个版本都只有作者公钥、没有 plugin.js.author.sig'
+      : '版本 ' + unsigned.join('、') + ' 只有作者公钥、没有 plugin.js.author.sig'
+  report.warn(
+    'AUTHOR_SIGN_UNVERIFIED',
+    pluginRel + ' 的' + detail + ',作者签名判为' + AUTHOR_SIGNATURE_VERDICT.unsigned +
+      ',不计为通过;作者签名可选,不阻断收录',
+    pluginRel,
+  )
 }
 
 /**

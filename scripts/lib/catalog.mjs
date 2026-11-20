@@ -471,7 +471,7 @@ export async function fetchVersions(baseUrl, options = {}) {
  * @param {string} baseUrl 插件发布的站点基址
  * @param {string} version 版本号
  * @param {{timeoutMs?: number}} [options] 选项
- * @returns {Promise<{meta: any, pluginJs: Buffer, authorSig: Buffer|null}>}
+ * @returns {Promise<{meta: any, pluginJs: Buffer, authorSig: Buffer|null, authorSigNote: string|null}>}
  */
 export async function fetchVersion(baseUrl, version, options = {}) {
   const base = trimSlash(baseUrl) + '/' + version
@@ -484,11 +484,22 @@ export async function fetchVersion(baseUrl, version, options = {}) {
     timeoutMs: options.timeoutMs,
     maxBytes: MAX_PLUGIN_BYTES,
   })
-  const authorSig = await fetchBytes(sigUrl, {
-    label: sigUrl,
-    timeoutMs: options.timeoutMs,
-    maxBytes: MAX_SIGNATURE_BYTES,
-    optional: true,
-  })
-  return { meta, pluginJs, authorSig }
+  // 作者签名是可选项:404 视为没有签名,其它拉取失败与空文件也只当作没有签名,不因此剔除插件
+  let authorSig = null
+  let authorSigNote = null
+  try {
+    authorSig = await fetchBytes(sigUrl, {
+      label: sigUrl,
+      timeoutMs: options.timeoutMs,
+      maxBytes: MAX_SIGNATURE_BYTES,
+      optional: true,
+    })
+  } catch (error) {
+    authorSigNote = 'plugin.js.author.sig 拉取失败,按没有作者签名处理:' + (error && error.message ? error.message : String(error))
+  }
+  if (authorSig && authorSig.length === 0) {
+    authorSig = null
+    authorSigNote = 'plugin.js.author.sig 是空文件,按没有作者签名处理'
+  }
+  return { meta, pluginJs, authorSig, authorSigNote }
 }

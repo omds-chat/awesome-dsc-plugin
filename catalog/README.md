@@ -52,6 +52,8 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 ```
 
 - 公钥用于校验作者自签名 `plugin.js.author.sig`。即使不打作者签名也要提交公钥,目录里缺公钥不会被收录。
+- 作者签名本身是可选项,从不阻断收录:验签失败只在报告与日志里警告。作者层只是附加证据,合集已经在登记侧审核过作者与插件,判定依据是 `catalog/` 的 PR 审核与仓库级校验,没有理由用作者签名把已审核的内容拦下来。
+- 公钥与签名两侧缺一不可:只有 `plugin.js.author.sig` 没有公钥、或只有公钥没有 `plugin.js.author.sig`,都判为「未校验」,不计为通过。
 - 公钥由 L2 清单覆盖,分发时原样复制到 `plugins/<作者>/author_pub.pem`。
 
 ## plugin.json
@@ -126,6 +128,12 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 6. 用 `scripts/verify-catalog-consistency.mjs` 交叉校验 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止。
 7. 每次 Release 全量重建 pages 并直接替换,不做版本留存;L1 的 `revision` 从已发布站点的 `manifest.json` 读上一次的值加一,取不到时从 1 开始。
 8. `catalog` 与 `certs` 随 pages 分发,但不进任何一层清单,它们是登记信息与信任材料。
+
+### catalog/index.json 的边界
+
+pages 包里的 `catalog/index.json` 只供本站站点自己展示,不作为插件市场省请求的入口:市场不得依赖它加载目录数据,应当按 `plugins.json` 与三层清单逐层取件。也不要用聚合索引替代按层取件——聚合索引是构建生成的派生数据,不进任何清单、不参与验签,一旦与三层清单不一致,市场就拿不到可用于校验的摘要;逐层取件才对得上「这一层有哪些文件、摘要是什么」。
+
+站点读不到它时会回落到 `plugins/author_manifest.json` 与 `plugins.json`,所以它缺失也不影响站点把作者与插件列出来。
 
 ### 登记错误与运行期异常的边界
 

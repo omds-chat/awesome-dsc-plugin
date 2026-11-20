@@ -28,7 +28,7 @@ pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `
 | `meta.json`、`tags.json` | 取自 `site/meta.json` 与 `site/tags.json`,原样复制 |
 | `plugins.json` | 插件目录索引,由 `scripts/build-from-catalog.mjs` 按 catalog 生成 |
 | `manifest.json`、`manifest.json.sig` | L1 清单及其签名 |
-| `catalog/` | main 分支的 catalog 目录复制进来的登记文件,含根目录的 `README.md` 与 `removed.json`,本次剔除的作者与插件不复制;另加构建生成的 `index.json`(汇总索引)与 `anomalies.json`(剔除清单) |
+| `catalog/` | main 分支的 catalog 目录复制进来的登记文件,含根目录的 `README.md` 与 `removed.json`,本次剔除的作者与插件不复制;另加构建生成的 `index.json`(汇总索引,只供本站展示,不作为市场省请求的入口)与 `anomalies.json`(剔除清单) |
 | `certs/` | main 分支的 certs 目录,原样复制;下只含来源文件夹 `certs/<来源 id>/` |
 | `plugins/` | 由 CI 依据 catalog 拉取并构建 |
 
@@ -46,7 +46,7 @@ plugins/<作者>/<插件>/manifest.json.sig
 plugins/<作者>/<插件>/<版本>/meta.json
 plugins/<作者>/<插件>/<版本>/plugin.js
 plugins/<作者>/<插件>/<版本>/plugin.js.sig
-plugins/<作者>/<插件>/<版本>/plugin.js.author.sig   可选,作者自签名原样保留
+plugins/<作者>/<插件>/<版本>/plugin.js.author.sig   可选,作者自签名原样保留;验签失败只警告,不阻断发布
 ```
 
 ## 四、清单覆盖范围

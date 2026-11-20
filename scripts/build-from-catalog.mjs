@@ -37,6 +37,7 @@
  *                远端 meta.json 与登记不符、plugin.js 为空等。只剔除该插件,其余插件照常构建与发布;
  *                剔除项写入 catalog/anomalies.json,由 scripts/report-build-anomalies.mjs 上报到仓库 Issue。
  *   签名失败、清单生成失败、分发自检失败既不是登记错误也不是单个插件的问题,仍按构建失败处理。
+ *   作者签名是另一类:它是可选证据,拉取失败、为空或验签失败都只记警告,从不剔除插件、也不让构建失败。
  *
  * 所有产出先落在临时目录,全部校验通过后才替换 --out,因此不会留下半成品。
  * pages 根目录不放 eec.pem,合集证书只在 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt。
@@ -404,10 +405,7 @@ async function pullPlugin(plugin, { timeoutMs }) {
     if (!payload.pluginJs || payload.pluginJs.length === 0) {
       throw new StageError('bundle', version + ' 的 plugin.js 为空')
     }
-    if (payload.authorSig && payload.authorSig.length === 0) {
-      throw new StageError('author-signature', version + ' 的 plugin.js.author.sig 为空')
-    }
-    releases.push({ version, meta, pluginJs: payload.pluginJs, authorSig: payload.authorSig })
+    releases.push({ version, meta, pluginJs: payload.pluginJs, authorSig: payload.authorSig, authorSigNote: payload.authorSigNote })
   }
   return { latest: versionsInfo.latest, versions: versionsInfo.versions, releases }
 }
@@ -449,6 +447,18 @@ async function writePluginsTree({ staging, catalog, anomalies, problems, timeout
       try {
         const pulled = await pullPlugin(plugin, { timeoutMs })
         pulledPlugins.push({ plugin, pulled })
+        // 作者签名是可选项:取不到或为空只记警告,插件照常收录
+        for (const release of pulled.releases) {
+          if (!release.authorSigNote) continue
+          problems.push(
+            problem(
+              'warning',
+              'AUTHOR_SIGNATURE_IGNORED',
+              '插件 ' + author.username + '/' + plugin.name + ' ' + release.version + ' 的' + release.authorSigNote + ';作者签名是可选证据,不阻断收录',
+              'plugins/' + author.username + '/' + plugin.dirName + '/' + release.version + '/plugin.js.author.sig',
+            ),
+          )
+        }
       } catch (error) {
         if (!(error instanceof StageError)) throw error
         anomalies.push({

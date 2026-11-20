@@ -141,7 +141,7 @@ DeepSeek-Chat-Enhanced repository (root CA, offline)
 | EEC key | ECDSA P-256; the CMS implementation of OpenSSL reports `provider signature failure` for Ed25519, so Ed25519 cannot be used here |
 | EEC certificate | issued by the root CA, `keyUsage=critical,digitalSignature`, `basicConstraints=critical,CA:FALSE`, valid for 365 days |
 | Collection signature | detached CMS signature, `openssl cms -sign -binary -md sha512 -outform DER -nocerts -noattr`, stored as a sibling `.sig` file. Both signing and verification pass `-binary`, so raw bytes are signed without line-ending canonicalisation. The artifact is always DER and verification passes `-inform DER` |
-| Author signature | detached bare public key signature, `openssl pkeyutl -sign -rawin`, Ed25519 author keys |
+| Author signature | detached bare public key signature, `openssl pkeyutl -sign -rawin`, Ed25519 author keys; a failed verification only warns and never blocks inclusion |
 
 Both curves are hard constraints rather than preferences: switching to Ed25519 breaks chain validation or CMS verification outright on the target browsers and on OpenSSL.
 
@@ -178,6 +178,10 @@ Plugin authors are independent signers: they do not go through this repository a
 
 Author signatures are optional. Without one, a version carries only this repository's EEC signature.
 
+An author signature never blocks inclusion: a failed verification, or a key and signature that are not both present, only raises a warning in reports and logs. The reason is that the author layer is supplementary evidence. The collection already reviews the author and the plugin on the registration side, through the PR review of `catalog/` and the repository-level check; an author signature answers "did the author sign this copy" and does not change the inclusion decision. Since it plays no part in that decision, there is no reason to use it to stop content that has already been reviewed.
+
+Both sides are required: a `plugin.js.author.sig` without `author_pub.pem`, or an `author_pub.pem` without `plugin.js.author.sig`, is reported as "unverified" and never as a pass. The first has a signature but no key to verify it with; the second has a key but no signature to verify. Neither offers usable evidence, so "not verified" must not be written up as "verified".
+
 ### Verification rules
 
 `pnpm verify:bundle` checks every item below against the built pages bundle and exits non-zero with the full problem list if any of them fails. Every problem names its layer and file path.
@@ -188,7 +192,7 @@ Author signatures are optional. Without one, a version carries only this reposit
 | 2 | Every plugin in the plugin index `plugins.json` appears in `plugins/<author>/plugin_manifest.json` and its plugin directory exists |
 | 3 | Every plugin directory has `versions.json` and `latest` is present in `versions` |
 | 4 | Every version directory has `meta.json`, `plugin.js` and `plugin.js.sig`, verified with `openssl cms -verify -binary -md sha512 -inform DER -CAfile <root> -certfile certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`; a failure is an error |
-| 5 | When `plugin.js.author.sig` exists in a version directory, `plugins/<author>/author_pub.pem` must exist and the signature must verify with `openssl pkeyutl -verify`; a failure is an error. Other `*.author.sig` files are not checked |
+| 5 | Author signatures are optional evidence and only warn, never block: when `plugin.js.author.sig` exists and `plugins/<author>/author_pub.pem` is usable, the signature is checked with `openssl pkeyutl -verify -pubin -rawin -inkey <key> -in plugin.js -sigfile plugin.js.author.sig`; a failure is a warning. A signature without a key, or a key without a signature, is reported as unverified and never as a pass. Other `*.author.sig` files are not checked |
 | 6 | When `tags.json` exists, every `tag` in the plugin index `plugins.json` comes from it |
 | 7 | All three manifests exist and are structurally valid: `schemaVersion` is 1, `revision` is a positive integer, `files` is a non-empty array, and each entry holds only `path` and `sha512` |
 | 8 | Every `path` is valid: forward slashes, relative, no `..`, not the manifest itself, no duplicates |
@@ -198,8 +202,8 @@ Author signatures are optional. Without one, a version carries only this reposit
 
 ### Verification semantics
 
-- Pre-release verification in this repository is strict: `scripts/build-from-catalog.mjs` and every CI step abort with a non-zero exit code on any error, so non-compliant content is never distributed. Repository-level verification `pnpm verify:catalog` only checks the structure and certificate material of `catalog/` and `certs/` and needs no build output; the strict check for the pages bundle is `pnpm verify:bundle`, which covers the three manifests, their signatures, artifact signatures and cross-consistency, and downgrades chain and signature problems to warnings when no root certificate is supplied while structure and hash checks still run. To relax missing manifests temporarily, pass `--allow-missing-manifest` to `scripts/verify-collection.mjs` directly.
-- Verification after distribution is lenient: on the plugin market side, certificate chain checks, plugin signature checks and web asset signature checks only warn. They never block and never fall back, and the user decides whether to continue.
+- Pre-release verification in this repository is strict: `scripts/build-from-catalog.mjs` and every CI step abort with a non-zero exit code on any error, so non-compliant content is never distributed. Repository-level verification `pnpm verify:catalog` only checks the structure and certificate material of `catalog/` and `certs/` and needs no build output; the strict check for the pages bundle is `pnpm verify:bundle`, which covers the three manifests, their signatures, artifact signatures and cross-consistency; author signatures are outside that strict check, so a failed verification or an unpaired key and signature only warns and never changes the exit code. To relax missing manifests temporarily, pass `--allow-missing-manifest` to `scripts/verify-collection.mjs` directly. Without a root certificate the chain cannot be checked: `verify-collection.mjs` reports `ROOT_CA_MISSING` as an error and exits non-zero, while structure and hash checks still run; to run only those, add `--allow-placeholder-eec` (skeleton mode, which downgrades chain and signature problems to warnings).
+- Verification after distribution is lenient: on the plugin market side, certificate chain checks, plugin signature checks and web asset signature checks only warn. Author signatures behave the same way and only warn on failure. They never block and never fall back, and the user decides whether to continue.
 - Signatures cover file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere.
 
 ### Requesting an EEC
@@ -355,7 +359,7 @@ This collection does not enable download counting.
 ## Import flow
 
 1. Open a PR that registers the plugin in `catalog/`: `catalog/<author>/author.json`, `catalog/<author>/author_pub.pem` and `catalog/<author>/<plugin>/plugin.json`. Fields, schemas and the submission checks are documented in [catalog/README.md](catalog/README.md).
-2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC.
+2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC. An author signature that cannot be fetched or is empty is treated as absent: it only logs a warning and never excludes the plugin.
 3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from `site/`, the plugin index `plugins.json` is generated from `catalog/`, `catalog/` (with `removed.json`, minus the authors and plugins excluded from this release) and `certs/` are copied over, `catalog/index.json` and `catalog/anomalies.json` are then written, and the L1, L2 and L3 manifests are generated and signed layer by layer.
 4. It cross-checks the result: `scripts/verify-catalog-consistency.mjs` compares `catalog/index.json`, `plugins.json`, `plugins/author_manifest.json`, the `catalog/` copy and the `plugins/` tree, and aborts with a non-zero exit code listing every difference.
 5. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes replaces the published site wholesale, keeping no versions.
@@ -405,11 +409,11 @@ The market reads collection metadata and the plugin catalog, then fetches each m
 | 7 | `<base_url>/plugins/<author>/<plugin>/versions.json` | Fetch the version list and latest version |
 | 8 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/meta.json` | Fetch plugin metadata and compare it with the digest recorded by L3 |
 | 9 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/plugin.js` and `plugin.js.sig` | Fetch the runtime script and verify it against the collection certificate |
-| 10 | `<base_url>/plugins/<author>/author_pub.pem` and `plugin.js.author.sig` | When an author signature exists, fetch the author key and signature |
+| 10 | `<base_url>/plugins/<author>/author_pub.pem` and `plugin.js.author.sig` | When an author signature exists, fetch the author key and signature; a failed check only warns and is never counted as a pass |
 
 Any failed check only raises a warning and never blocks plugin loading, matching the lenient semantics described above.
 
-`catalog/index.json` is the aggregate index for the site and outside readers: the author list (`username`, `profile`, plugin count) and the plugin list (author, name, description, license, repository link, current version, tags, version count). The build generates it for exactly what it collected; it is not part of distribution integrity, it is covered by no manifest, and the market may read it directly or keep following the layer-by-layer table above.
+`catalog/index.json` exists for this site's own display only: the author list (`username`, `profile`, plugin count) and the plugin list (author, name, description, license, repository link, current version, tags, version count), with the site falling back to `plugins/author_manifest.json` and `plugins.json` when it cannot read the index. It is not an entry point that saves the market requests, and the market must not depend on it to load catalog data. Nor may an aggregate index replace layer-by-layer fetching: the aggregate flattens registration data into one derived file that no manifest covers and no signature vouches for, so once it disagrees with the three manifests the market has no digest to verify, while fetching layer by layer yields exactly which files a layer holds and what their digests are.
 
 ## Cross-origin access
 
@@ -435,7 +439,8 @@ pnpm build           # needs EEC_SECRET_KEY and ROOT_CA_PATH: assemble dist/page
 pnpm verify:bundle --root-ca root_ca.crt   # pages bundle check
 ```
 
-- Without a root certificate, `pnpm verify:bundle` still checks structure and every file's SHA-512 and only downgrades chain and signature problems to warnings; set `ROOT_CA_PATH` or pass `--root-ca` for the full check.
+- Without a root certificate the chain cannot be checked: `verify-collection.mjs` reports `ROOT_CA_MISSING` as an error and exits non-zero while structure and every file's SHA-512 are still checked; add `--allow-placeholder-eec` to `scripts/verify-collection.mjs` (skeleton mode) to downgrade chain and signature problems to warnings. Set `ROOT_CA_PATH` or pass `--root-ca` for the full check.
+- Author signatures never change the exit code: a failed verification or an unpaired key and signature only warns and does not affect whether `verify:bundle` passes.
 - `pnpm build` is the same as calling `scripts/build-from-catalog.mjs`; the full local reproduction is:
 
   ```bash

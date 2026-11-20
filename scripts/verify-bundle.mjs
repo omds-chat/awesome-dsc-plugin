@@ -7,7 +7,9 @@
  *                                     catalog/ 副本与 plugins/ 树的收录信息交叉一致性
  *
  * 两条校验都针对同一个 pages 包目录,任一条以非零退出码结束,本脚本就以非零退出码结束。
- * 不给根证书(--root-ca 或 ROOT_CA_PATH)时,第 1 条只把证书链与签名降级为警告,结构与哈希照常校验。
+ * 不给根证书(--root-ca 或 ROOT_CA_PATH)时证书链无法校验,第 1 条报 ROOT_CA_MISSING 并以非零退出码结束,
+ * 结构与哈希照常校验;只做结构与哈希检查时,直接对 verify-collection.mjs 加 --allow-placeholder-eec。
+ * 作者签名不改变退出码:验签失败与公钥、签名两侧不齐都只警告。
  *
  * 用法:
  *   node scripts/verify-bundle.mjs --dir dist/pages

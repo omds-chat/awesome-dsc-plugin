@@ -419,7 +419,10 @@ export function verifyFileAuthor(filePath, sigPath, authorPubPath) {
     { allowFailure: true },
   )
   if (result.ok) return { ok: true, reason: null }
-  return { ok: false, reason: head(result.stderr || result.stdout, 2) || 'openssl pkeyutl -verify 失败' }
+  // execFileSync 失败且没有 stderr 时,error.message 是整条命令行;那不是验签原因,不写进警告
+  const stderr = String(result.stderr || '').trim()
+  const detail = stderr.startsWith('Command failed') ? '' : head(stderr, 2)
+  return { ok: false, reason: detail || head(result.stdout, 2) || 'openssl pkeyutl -verify 失败' }
 }
 
 /**
