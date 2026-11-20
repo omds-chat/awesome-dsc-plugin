@@ -49,6 +49,8 @@ plugins/<作者>/<插件>/<版本>/plugin.js.sig
 plugins/<作者>/<插件>/<版本>/plugin.js.author.sig   可选,作者自签名原样保留;验签失败只警告,不阻断发布
 ```
 
+`plugins.json` 与 `catalog/index.json` 是给作者自查、速览与第三方搜索用的统计清单,不是宿主读取插件信息的通道:宿主先按 `plugins.json` 枚举插件,再按三层清单逐层取件,插件信息(版本、元数据、摘要)只从层里来。`plugins.json` 被 L1 清单覆盖,`catalog/index.json` 与 `catalog/anomalies.json` 不进任何清单,改动后者不会有任何校验发现。逐文件的生成者、消费者与签名归属见 [../docs/design/pages-artifacts.md](../docs/design/pages-artifacts.md)。
+
 ## 四、清单覆盖范围
 
 | 层 | 目录 | 覆盖文件 |

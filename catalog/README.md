@@ -135,6 +135,8 @@ pages 包里的 `catalog/index.json` 只供本站站点自己展示,不作为插
 
 站点读不到它时会回落到 `plugins/author_manifest.json` 与 `plugins.json`,所以它缺失也不影响站点把作者与插件列出来。
 
+根级 `plugins.json` 与 `catalog/index.json` 同属统计清单,给作者自查、速览与第三方搜索用,不是宿主读取插件信息的通道:宿主按 `plugins.json` 与三层清单逐层取件。两者都只描述本次发布收录了什么,区别在于 `plugins.json` 被 L1 清单覆盖、`catalog/index.json` 不进任何清单。逐文件的生成者、消费者与签名归属见 [docs/design/pages-artifacts.md](../docs/design/pages-artifacts.md)。
+
 ### 登记错误与运行期异常的边界
 
 构建把「作者要改的东西」和「运行期偶然失败」分开处理,这条边界在 `scripts/build-from-catalog.mjs` 里实现:

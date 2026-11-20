@@ -415,6 +415,8 @@ catalog/<作者>/
 
 `catalog/index.json` 只供本站站点自己展示:作者列表(`username`、`profile`、插件数)与插件列表(作者、名称、描述、许可证、仓库链接、当前版本、标签、版本数),站点读不到它时回落到 `plugins/author_manifest.json` 与 `plugins.json`。它不是市场省请求的入口,市场不得依赖它加载目录数据;也不要用聚合索引替代按层取件——聚合索引把登记信息压成一份派生数据,不进任何清单、不参与验签,一旦与三层清单不一致,市场就拿不到可用于校验的摘要,而逐层取件才对得上「这一层有哪些文件、摘要是什么」。
 
+`plugins.json` 与 `catalog/index.json` 同属统计清单:`plugins.json` 只给「有哪些插件、作者是谁、标签是什么」,不含版本、描述与任何摘要;`catalog/index.json` 是展示用的派生汇总。两份都给作者自查、速览与第三方搜索用,不是宿主读取插件信息的通道——宿主按层取件,`versions.json`、各版本 `meta.json` 与三层清单才是带摘要的来源,`plugin.js` 另有 `plugin.js.sig` 独立签名。逐文件的生成者、消费者与签名归属见 [docs/design/pages-artifacts.md](docs/design/pages-artifacts.md)。
+
 ## 跨域访问
 
 本合集托管在 GitHub Pages。Pages 对静态资源默认返回 `Access-Control-Allow-Origin: *`,因此分发内容天然可以被跨域读取,托管侧无法把来源收窄到白名单。这是托管平台的既定行为,不是本仓库的配置。
