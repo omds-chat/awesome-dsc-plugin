@@ -28,12 +28,12 @@ catalog/
 | 字段 | 类型 | 说明 |
 |:---:|:---:|:---:|
 | `username` | string | 必填,非空。作者用户名,与所在目录名逐字符一致,也是分发站点里 `plugins/<作者>/` 的目录名;按 GitHub 用户名规则校验,只允许字母、数字与连字符,首尾不得是连字符,长度 1 到 39 |
-| `profile` | string | 必填,非空。作者主页的完整绝对地址,例如 `https://github.com/omdsc-dev`,插件市场用它链接回作者 |
+| `profile` | string | 必填,非空。作者主页的完整绝对地址,例如 `https://github.com/omds-chat`,插件市场用它链接回作者 |
 
 ```json
 {
-  "username": "omdsc-dev",
-  "profile": "https://github.com/omdsc-dev"
+  "username": "omds-chat",
+  "profile": "https://github.com/omds-chat"
 }
 ```
 
@@ -72,8 +72,8 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
   "name": "dsc-plugin-gallery",
   "description": "把对话里的图片整理成画廊视图。",
   "license": "Apache-2.0",
-  "repo_link": "https://github.com/omdsc-dev/dsc-plugin-gallery",
-  "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+  "repo_link": "https://github.com/omds-chat/dsc-plugin-gallery",
+  "base_url": "https://omds-chat.github.io/dsc-plugin-gallery/",
   "tags": ["ui-enhance"]
 }
 ```
@@ -161,7 +161,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 [
   {
     "name": "dsc-plugin-gallery",
-    "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+    "base_url": "https://omds-chat.github.io/dsc-plugin-gallery/",
     "removed_in": "v2.0.0",
     "note": "作者改为独立分发,不再随本合集发布。"
   }

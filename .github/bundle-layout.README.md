@@ -105,4 +105,4 @@ plugins/
         plugin.js.author.sig
 ```
 
-pages 包根目录另有 `meta.json`、`tags.json`、`plugins.json`,以及 L1 清单 `manifest.json` 与 `manifest.json.sig`,含义见根目录 [README](../README.md)。仓库内不存放 `eec.pem`,合集证书只在 `certs/awesome-dsc-plugin-eec.crt`。
+pages 包根目录另有 `meta.json`、`tags.json`、`plugins.json`,以及 L1 清单 `manifest.json` 与 `manifest.json.sig`,含义见根目录 [README](../README.md)。仓库内不存放 `eec.pem`,合集证书只在 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`;`certs/` 下只放来源文件夹,证书与公钥都在 `certs/<来源 id>/<文件名>` 下。

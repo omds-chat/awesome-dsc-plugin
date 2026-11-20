@@ -39,12 +39,12 @@
  *   签名失败、清单生成失败、分发自检失败既不是登记错误也不是单个插件的问题,仍按构建失败处理。
  *
  * 所有产出先落在临时目录,全部校验通过后才替换 --out,因此不会留下半成品。
- * pages 根目录不放 eec.pem,合集证书只在 certs/awesome-dsc-plugin-eec.crt。
+ * pages 根目录不放 eec.pem,合集证书只在 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt。
  *
  * 用法:
  *   EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt node scripts/build-from-catalog.mjs \
  *     --catalog catalog --certs certs --site site/dist --out dist/pages \
- *     --published-base https://omdsc-dev.github.io/awesome-dsc-plugin/
+ *     --published-base https://omds-chat.github.io/awesome-dsc-plugin/
  */
 import {
   copyFileSync,
@@ -62,7 +62,15 @@ import { formatProblems, verifyCollection } from './lib/collection-verify.mjs'
 import { buildLayerManifests, listLayerDirs, problem } from './lib/layer-manifests.mjs'
 import { buildAnomalyReport, buildCatalogIndex } from './lib/catalog-index.mjs'
 import { readCollectionMeta } from './lib/collection-meta.mjs'
-import { EEC_CERT_BASENAME, certMatchesKey, requireOpenssl, resolveKeyFile, signFileCms, verifyChain } from './pki.mjs'
+import {
+  EEC_CERT_REL_IN_CERTS,
+  EEC_CERT_RELATIVE,
+  certMatchesKey,
+  requireOpenssl,
+  resolveKeyFile,
+  signFileCms,
+  verifyChain,
+} from './pki.mjs'
 import { fetchVersion, fetchVersions, readCatalog } from './lib/catalog.mjs'
 
 /** site 产物里不允许出现的顶层名字:这些位置由本脚本独占,冲突会让人分不清来源 */
@@ -270,15 +278,15 @@ function inspectSite(siteDir, problems) {
  * 不配对时直接失败,避免产出一批无法验签的签名。
  */
 function prepareSigner({ certsDir, rootCaPath, problems }) {
-  const eecCertPath = join(certsDir, EEC_CERT_BASENAME)
+  const eecCertPath = join(certsDir, EEC_CERT_REL_IN_CERTS)
   if (!existsSync(eecCertPath)) {
-    problems.push(problem('error', 'EEC_MISSING', '证书目录缺少 ' + EEC_CERT_BASENAME, 'certs/' + EEC_CERT_BASENAME))
+    problems.push(problem('error', 'EEC_MISSING', '证书目录缺少 ' + EEC_CERT_RELATIVE, EEC_CERT_RELATIVE))
     return null
   }
   if (rootCaPath) {
     const chain = verifyChain(eecCertPath, rootCaPath)
     if (!chain.ok) {
-      problems.push(problem('error', 'EEC_NOT_CHAINED', 'certs/' + EEC_CERT_BASENAME + ' 不是由给定根证书签发:' + chain.reason, 'certs/' + EEC_CERT_BASENAME))
+      problems.push(problem('error', 'EEC_NOT_CHAINED', EEC_CERT_RELATIVE + ' 不是由给定根证书签发:' + chain.reason, EEC_CERT_RELATIVE))
       return null
     }
   }
@@ -300,8 +308,8 @@ function prepareSigner({ certsDir, rootCaPath, problems }) {
         problem(
           'error',
           'SIGN_KEY_MISMATCH',
-          'EEC_SECRET_KEY 与 certs/' + EEC_CERT_BASENAME + ' 不是同一把密钥;请确认证书与 CI secret 配对',
-          'certs/' + EEC_CERT_BASENAME,
+          'EEC_SECRET_KEY 与 ' + EEC_CERT_RELATIVE + ' 不是同一把密钥;请确认证书与 CI secret 配对',
+          EEC_CERT_RELATIVE,
         ),
       )
       keyFile.cleanup()
@@ -628,7 +636,7 @@ async function main() {
   checkPresetTags({ catalog, presetTags, problems })
 
   if (!isDirectory(certsDir)) throw new Error('证书目录不存在:' + certsDir)
-  if (!existsSync(join(certsDir, EEC_CERT_BASENAME))) throw new Error('证书目录缺少 ' + EEC_CERT_BASENAME + ':' + certsDir)
+  if (!existsSync(join(certsDir, EEC_CERT_REL_IN_CERTS))) throw new Error('证书目录缺少 ' + EEC_CERT_RELATIVE + ':' + certsDir)
 
   // 登记不合规在这里就中止:不让作者带着不合法的登记进入拉取阶段,也不发布任何插件。
   const registrationErrors = problems.filter((item) => item.level === 'error')
@@ -673,7 +681,7 @@ async function main() {
     )
 
     if (existsSync(join(staging, 'eec.pem'))) {
-      throw new Error('分发包根目录不允许出现 eec.pem;合集证书只在 certs/' + EEC_CERT_BASENAME)
+      throw new Error('分发包根目录不允许出现 eec.pem;合集证书只在 ' + EEC_CERT_RELATIVE)
     }
 
     signer = prepareSigner({ certsDir: join(staging, 'certs'), rootCaPath, problems })

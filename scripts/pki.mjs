@@ -25,10 +25,21 @@ export const ROOT_CA_FILE = 'root_ca.crt'
 export const ROOT_CA_KEY_FILE = 'root_secret.pem'
 /** 终端签名证书的历史文件名,只在兼容旧布局时使用 */
 export const EEC_CERT_FILE = 'eec.pem'
-/** 合集终端签名证书的文件名,固定放在 certs 目录内 */
-export const EEC_CERT_BASENAME = 'awesome-dsc-plugin-eec.crt'
+/**
+ * certs 内 EEC 的来源文件夹名,即来源 id,与证书文件名共用这个前缀。
+ * certs/ 只放来源文件夹,证书与公钥都放在 certs/<来源 id>/<文件名> 下。
+ */
+export const EEC_SOURCE_DIR = 'awesome-dsc-plugin'
+/** 合集终端签名证书的文件名,固定为 <来源 id>-eec.crt */
+export const EEC_CERT_BASENAME = EEC_SOURCE_DIR + '-eec.crt'
+/** 与 EEC 私钥配对的公钥文件名,固定为 <来源 id>-eec-secret.pub */
+export const EEC_PUB_BASENAME = EEC_SOURCE_DIR + '-eec-secret.pub'
+/** 合集终端签名证书相对 certs 目录的路径,形态固定为 <来源 id>/<来源 id>-eec.crt */
+export const EEC_CERT_REL_IN_CERTS = EEC_SOURCE_DIR + '/' + EEC_CERT_BASENAME
+/** 与 EEC 私钥配对的公钥相对 certs 目录的路径 */
+export const EEC_PUB_REL_IN_CERTS = EEC_SOURCE_DIR + '/' + EEC_PUB_BASENAME
 /** 合集终端签名证书相对仓库根的路径。Pages 根目录不放证书,证书只在 certs 里 */
-export const EEC_CERT_RELATIVE = 'certs/' + EEC_CERT_BASENAME
+export const EEC_CERT_RELATIVE = 'certs/' + EEC_CERT_REL_IN_CERTS
 /** EEC 私钥文件名,只从 CI secret 读取 */
 export const EEC_KEY_FILE = 'eec_secret.pem'
 /** EEC 证书签名请求文件名 */
@@ -191,8 +202,8 @@ export function resolveKeyFile(source, label = '私钥') {
  */
 export function genRootCa(dir, options = {}) {
   requireOpenssl()
-  const org = requireText(options.org || 'omdsc-dev', '组织名称')
-  const name = requireText(options.name || 'omdsc-dev Root CA', '根 CA 名称')
+  const org = requireText(options.org || 'omds-chat', '组织名称')
+  const name = requireText(options.name || 'omds-chat Root CA', '根 CA 名称')
   const days = String(options.days || 3650)
   const keyPath = resolve(dir, options.keyFile || ROOT_CA_KEY_FILE)
   const certPath = resolve(dir, options.certFile || ROOT_CA_FILE)
@@ -233,10 +244,10 @@ export function genEecKey(dir, options = {}) {
  * @param {object} [options] keyFile、csrFile
  * @returns {{csrPath: string, keyPath: string}}
  */
-export function genCsr(dir, commonName, org = 'omdsc-dev', options = {}) {
+export function genCsr(dir, commonName, org = 'omds-chat', options = {}) {
   requireOpenssl()
   const cn = requireText(commonName, 'commonName')
-  const o = requireText(org || 'omdsc-dev', '组织名称')
+  const o = requireText(org || 'omds-chat', '组织名称')
   const keyPath = resolve(dir, options.keyFile || EEC_KEY_FILE)
   requireFile(keyPath, 'EEC 私钥')
   const csrPath = resolve(dir, options.csrFile || EEC_CSR_FILE)
@@ -522,7 +533,7 @@ function toPosixRelative(rootDir, target) {
  * 解析合集终端签名证书的位置。优先级从高到低:
  *   1. 显式参数 eecCert;
  *   2. 环境变量 EEC_CERT_PATH;
- *   3. <合集根>/certs/awesome-dsc-plugin-eec.crt(现行布局);
+ *   3. <合集根>/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt(现行布局);
  *   4. <合集根>/eec.pem(旧布局兼容)。
  * 前两项由调用方显式指定,不做存在性降级;后两项按存在性挑选,都不存在时返回 certs 下的路径,
  * 让调用方按「缺证书」报错。

@@ -5,7 +5,7 @@
  *   catalog/anomalies.json  本次发布被剔除的插件清单,含作者、插件、阶段与失败原因。
  *
  * 两份文件都只描述「本次发布实际收录了什么」,因此只接收构建判定为可发布的作者与插件;
- * 被剔除的插件不进入 index.json,也不出现在 datalog.json 与 plugins 树里。
+ * 被剔除的插件不进入 index.json,也不出现在 plugins.json 与 plugins 树里。
  * catalog 目录不纳入任何清单,两份文件同样不被清单覆盖。
  */
 

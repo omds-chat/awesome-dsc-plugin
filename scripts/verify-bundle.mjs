@@ -3,7 +3,7 @@
  * pages 包校验:把两条只读校验串成一条命令。
  *
  *   1. verify-collection.mjs          三层清单、清单签名、产物签名、证书链、必需文件与哈希
- *   2. verify-catalog-consistency.mjs  catalog/index.json、datalog.json、plugins/author_manifest.json、
+ *   2. verify-catalog-consistency.mjs  catalog/index.json、plugins.json、plugins/author_manifest.json、
  *                                     catalog/ 副本与 plugins/ 树的收录信息交叉一致性
  *
  * 两条校验都针对同一个 pages 包目录,任一条以非零退出码结束,本脚本就以非零退出码结束。

@@ -33,7 +33,7 @@ import {
 
 /**
  * 合集根目录必需的文件。tags.json 可选,存在时才要求被 L1 清单覆盖。
- * 终端签名证书不在合集根,按 resolveEecCertPath 解析(现行布局是 certs/awesome-dsc-plugin-eec.crt),
+ * 终端签名证书不在合集根,按 resolveEecCertPath 解析(现行布局是 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt),
  * 因此单独校验,不列入本数组。
  */
 export const ROOT_REQUIRED_FILES = ['meta.json', 'plugins.json']
@@ -364,8 +364,8 @@ export function resolveRootCaPath(options = {}, env = process.env) {
  * @param {string} collectionDir 合集根目录
  * @param {object} [options] 选项
  * @param {string|null} [options.rootCaPath] 根证书路径,缺失时无法校验证书链与 CMS 签名
- * @param {string} [options.eecCert] 终端签名证书路径,默认 certs/awesome-dsc-plugin-eec.crt
- * @param {boolean} [options.allowPlaceholderEec] 骨架模式:根证书缺失或 certs/awesome-dsc-plugin-eec.crt 未由根 CA 签发时降级为警告
+ * @param {string} [options.eecCert] 终端签名证书路径,默认 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt
+ * @param {boolean} [options.allowPlaceholderEec] 骨架模式:根证书缺失或 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt 未由根 CA 签发时降级为警告
  * @param {string} [options.collectionName] 合集名称,默认取目录名
  * @returns {{ok: boolean, root: string, collectionName: string, errorCount: number, warningCount: number, problems: Array<object>, stats: object}}
  */

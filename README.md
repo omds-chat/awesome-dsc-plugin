@@ -6,7 +6,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 ## 定位与收录范围
 
-本合集面向 dsc 的运行时插件,由 omdsc-dev 维护。本仓库是 omdsc-dev 的终端签名方(EEC),持有由 DeepSeek-Chat-Enhanced 仓库的根证书机构签发的终端签名证书,并用它为三层清单与每个版本的插件产物生成 CMS 分离签名。
+本合集面向 dsc 的运行时插件,由 omds-chat 维护。本仓库是 omds-chat 的终端签名方(EEC),持有由 DeepSeek-Chat-Enhanced 仓库的根证书机构签发的终端签名证书,并用它为三层清单与每个版本的插件产物生成 CMS 分离签名。
 
 收录条件:
 
@@ -33,7 +33,9 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 ├── manifest.json.sig                  # L1 清单签名
 ├── catalog/                           # 收录登记复制(含 removed.json),另含构建生成的 index.json 与 anomalies.json,不进任何清单
 ├── certs/                             # 信任材料,原样复制,不进任何清单
-│   └── awesome-dsc-plugin-eec.crt     # 合集终端签名证书(EEC),由根 CA 签发
+│   └── awesome-dsc-plugin/            # 来源文件夹,与来源 id 同名,内含证书与配对公钥
+│       ├── awesome-dsc-plugin-eec.crt          # 合集终端签名证书(EEC),由根 CA 签发
+│       └── awesome-dsc-plugin-eec-secret.pub   # 与 EEC 私钥配对的公钥
 └── plugins/
     ├── author_manifest.json           # L1
     └── <作者>/
@@ -52,7 +54,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
                 └── plugin.js.author.sig # 作者裸公钥签名,可选
 ```
 
-根目录不再有 `eec.pem`:合集证书的固定位置是 `certs/awesome-dsc-plugin-eec.crt`,随 pages 包分发,不进任何清单;根证书同样不进分发内容。
+根目录不再有 `eec.pem`:合集证书的固定位置是 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,随 pages 包分发,不进任何清单;根证书同样不进分发内容。`certs/` 下只放来源文件夹,证书与公钥都放在 `certs/<来源 id>/<文件名>` 下,文件夹名即来源 id,文件名以 `<来源 id>-` 开头,私钥一律不入库。
 
 合集设置放在 `site/`:`site/meta.json` 与 `site/tags.json` 是 pages 包同名文件的唯一来源,内容原样进入 pages 包。`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 是构建产物,只在构建出的 pages 包里出现,仓库根不再存放它们,也没有空基线。
 
@@ -94,13 +96,13 @@ pages 包内各位置的必需与可选文件如下。它们只存在于构建�
 | 位置 | 必需 | 可选 |
 |:---:|:---:|:---:|
 | pages 包根 | `meta.json`、`plugins.json`、`plugins/author_manifest.json`、`manifest.json`、`manifest.json.sig` | `tags.json` |
-| `certs/` | `awesome-dsc-plugin-eec.crt`,不进任何清单 | `awesome-dsc-plugin-secret.pub`,同样不进清单 |
+| `certs/<来源 id>/` | `<来源 id>-eec.crt`,不进任何清单 | `<来源 id>-eec-secret.pub`,同样不进清单 |
 | `catalog/` | 每位作者的 `author.json`、`author_pub.pem` 与 `<插件>/plugin.json`,原样复制,不进任何清单 | 无 |
 | `plugins/<作者>/` | `plugin_manifest.json`、`manifest.json`、`manifest.json.sig` | `author_pub.pem` |
 | `plugins/<作者>/<插件>/` | `versions.json`、`manifest.json`、`manifest.json.sig` | 无 |
 | `plugins/<作者>/<插件>/<x.y.z>/` | `meta.json`、`plugin.js`、`plugin.js.sig` | `plugin.js.author.sig` |
 
-目录命名、`versions.json` 结构与 `meta.json` 字段见 [.github/bundle-layout.README.md](.github/bundle-layout.README.md)。合集证书只在 `certs/awesome-dsc-plugin-eec.crt`,根目录不再有 `eec.pem`;它只证明签名者身份,不进任何清单。根证书不进分发内容,由 online-data 分支分发,网页用内嵌的根证书指纹核对。
+目录命名、`versions.json` 结构与 `meta.json` 字段见 [.github/bundle-layout.README.md](.github/bundle-layout.README.md)。合集证书只在 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,根目录不再有 `eec.pem`;它只证明签名者身份,不进任何清单。根证书不进分发内容,由 online-data 分支分发,网页用内嵌的根证书指纹核对。
 
 ## 签名与校验
 
@@ -110,9 +112,9 @@ pages 包内各位置的必需与可选文件如下。它们只存在于构建�
 
 | 角色 | 承担者 | 持有物 | 签发对象 |
 |:---:|:---:|:---:|:---:|
-| 根证书机构(CA) | `DeepSeek-Chat-Enhanced` 仓库(组织主线仓库) | 根私钥(离线,不入库)、根证书 | 终端签名证书 `certs/awesome-dsc-plugin-eec.crt` |
-| 终端签名方(EEC) | 本仓库 | EEC 私钥(CI secret `EEC_SECRET_KEY`)、`certs/awesome-dsc-plugin-eec.crt` | 三层清单与每个版本的 `plugin.js` 的 CMS 分离签名 |
-| 独立签名方 | 插件作者,含 omdsc-dev 自身 | 作者密钥对 | `plugin.js` 的裸公钥分离签名 |
+| 根证书机构(CA) | `DeepSeek-Chat-Enhanced` 仓库(组织主线仓库) | 根私钥(离线,不入库)、根证书 | 终端签名证书 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` |
+| 终端签名方(EEC) | 本仓库 | EEC 私钥(CI secret `EEC_SECRET_KEY`)、`certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | 三层清单与每个版本的 `plugin.js` 的 CMS 分离签名 |
+| 独立签名方 | 插件作者,含 omds-chat 自身 | 作者密钥对 | `plugin.js` 的裸公钥分离签名 |
 
 ### 证书链
 
@@ -123,7 +125,7 @@ DeepSeek-Chat-Enhanced 仓库(根 CA,离线)
   root_ca.crt
       │  签发
       ▼
-  本仓库 certs/awesome-dsc-plugin-eec.crt(终端签名证书 EEC)
+  本仓库 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt(终端签名证书 EEC)
       │  openssl cms -sign -binary -md sha512 -outform DER -nocerts -noattr
       ▼
   manifest.json.sig          L1 清单签名
@@ -158,8 +160,8 @@ DeepSeek-Chat-Enhanced 仓库(根 CA,离线)
 合集签名与验签,三层清单与 `plugin.js` 用同一条命令,只是文件名不同:
 
 ```bash
-openssl cms -sign -binary -md sha512 -outform DER -in manifest.json -out manifest.json.sig -signer certs/awesome-dsc-plugin-eec.crt -inkey eec_secret.pem -nocerts -noattr
-openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -content manifest.json -CAfile root_ca.crt -certfile certs/awesome-dsc-plugin-eec.crt
+openssl cms -sign -binary -md sha512 -outform DER -in manifest.json -out manifest.json.sig -signer certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt -inkey eec_secret.pem -nocerts -noattr
+openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -content manifest.json -CAfile root_ca.crt -certfile certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt
 ```
 
 `-md sha512` 固定摘要算法,不依赖 OpenSSL 的默认值;`-outform DER` 不可省略。默认输出是 S/MIME `multipart/signed` 包装,浏览器无法解析,而插件市场要在浏览器里验签,所以 DER 是跨仓库统一格式:签名方固定 `-outform DER`,验签方固定 `-inform DER`,任何一方改用默认格式都会验签失败。产物可用 `openssl asn1parse -inform DER -in manifest.json.sig` 确认为 DER。
@@ -182,17 +184,17 @@ openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -conten
 
 | 编号 | 规则 |
 |:---:|:---:|
-| 1 | 合集证书 `certs/awesome-dsc-plugin-eec.crt` 存在(根目录不再有 `eec.pem`),由给定根证书签发(`--root-ca` 或 `ROOT_CA_PATH`),未过期,`keyUsage` 含 `digitalSignature`,`basicConstraints` 非 CA |
+| 1 | 合集证书 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 存在(根目录不再有 `eec.pem`),由给定根证书签发(`--root-ca` 或 `ROOT_CA_PATH`),未过期,`keyUsage` 含 `digitalSignature`,`basicConstraints` 非 CA |
 | 2 | 插件目录索引 `plugins.json` 中的每个插件都在 `plugins/<author>/plugin_manifest.json` 中出现,且插件目录存在 |
 | 3 | 每个插件目录有 `versions.json`,`latest` 必须在 `versions` 列表内 |
-| 4 | 每个版本目录有 `meta.json`、`plugin.js`、`plugin.js.sig`,并用 `openssl cms -verify -binary -md sha512 -inform DER -CAfile <根证书> -certfile certs/awesome-dsc-plugin-eec.crt` 验签,失败即报错 |
+| 4 | 每个版本目录有 `meta.json`、`plugin.js`、`plugin.js.sig`,并用 `openssl cms -verify -binary -md sha512 -inform DER -CAfile <根证书> -certfile certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 验签,失败即报错 |
 | 5 | 若版本目录存在 `plugin.js.author.sig`,则 `plugins/<author>/author_pub.pem` 必须存在,并用 `openssl pkeyutl -verify` 验证,失败即报错;其它 `*.author.sig` 不参与校验 |
 | 6 | `tags.json` 存在时,插件目录索引 `plugins.json` 的 `tag` 必须取自其中 |
 | 7 | 三层清单存在且结构合法:`schemaVersion` 为 1,`revision` 为正整数,`files` 为非空数组,条目只含 `path` 与 `sha512` |
 | 8 | 清单条目的 `path` 合法:正斜杠、相对路径、不含 `..`、不指向清单自身、不重复 |
 | 9 | 覆盖范围与该层应有的文件严格相等:该有的都在清单里,清单里没有多余项,L3 不得出现 `plugin.js` 与 `plugin.js.sig` |
 | 10 | 清单记录的每个 SHA-512 与文件实际内容一致,不一致时报出层号与具体文件 |
-| 11 | 每层 `manifest.json.sig` 用根证书与 `certs/awesome-dsc-plugin-eec.crt` 验签,失败即报错 |
+| 11 | 每层 `manifest.json.sig` 用根证书与 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 验签,失败即报错 |
 
 ### 校验语义
 
@@ -208,15 +210,15 @@ EEC 证书由 DeepSeek-Chat-Enhanced 仓库的根证书机构签发,本仓库不
 
    ```bash
    openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out eec_secret.pem
-   openssl req -new -key eec_secret.pem -out eec.csr -subj '/O=omdsc-dev/CN=awesome-dsc-plugin'
+   openssl req -new -key eec_secret.pem -out eec.csr -subj '/O=omds-chat/CN=awesome-dsc-plugin'
    ```
 
 2. 把 `eec.csr` 提交给 DeepSeek-Chat-Enhanced 仓库(根 CA 维护方),说明用途、有效期与联系人。
-3. 拿回签发好的证书,写入本仓库的 `certs/awesome-dsc-plugin-eec.crt`,根目录不再有 `eec.pem`。
+3. 拿回签发好的证书,写入本仓库的 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,根目录不再有 `eec.pem`。
 4. 把 `eec_secret.pem` 的内容放入 GitHub Actions secret `EEC_SECRET_KEY`,不要提交到仓库。
-5. 合并后 CI 用根证书校验 `certs/awesome-dsc-plugin-eec.crt` 的签发链,链不通、证书过期、`keyUsage` 或 `basicConstraints` 不符都会中止构建。
+5. 合并后 CI 用根证书校验 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 的签发链,链不通、证书过期、`keyUsage` 或 `basicConstraints` 不符都会中止构建。
 
-根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,本仓库与 CI 都拿不到,也不需要。仓库内提交的 `certs/awesome-dsc-plugin-eec.crt` 只含公钥材料,由该根 CA 签发;CI 也支持用 secret `EEC_CERT_PEM` 临时覆盖它,覆盖后同样要先过证书链校验。
+根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,本仓库与 CI 都拿不到,也不需要。仓库内提交的 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 只含公钥材料,由该根 CA 签发;CI 也支持用 secret `EEC_CERT_PEM` 临时覆盖它,覆盖后同样要先过证书链校验。
 
 ## 维护者自查脚本
 
@@ -294,9 +296,10 @@ awesome-dsc-plugin/
 │       ├── author_pub.pem              作者公钥,Ed25519,OpenSSL PEM
 │       └── <插件>/                      一个插件一个目录
 │           └── plugin.json             插件登记,含 base_url 与可选 tags
-├── certs/                              合集证书,随 pages 包分发,不进任何清单
-│   ├── awesome-dsc-plugin-eec.crt      合集终端签名证书(EEC),由根 CA 签发
-│   └── awesome-dsc-plugin-secret.pub   与 EEC 私钥配对的公钥材料
+├── certs/                              证书来源文件夹,随 pages 包分发,不进任何清单
+│   └── awesome-dsc-plugin/             来源文件夹,与来源 id 同名,内含证书与配对公钥
+│       ├── awesome-dsc-plugin-eec.crt
+│       └── awesome-dsc-plugin-eec-secret.pub
 ├── schemas/                            本仓库全部 JSON Schema
 │   ├── README.md                       schema 索引
 │   ├── manifest.schema.json            三层清单的 JSON Schema
@@ -335,7 +338,7 @@ awesome-dsc-plugin/
     └── src/                            站点源码:index.html 与 assets/
 ```
 
-仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与工程文件;`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
+仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与工程文件;`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omds-chat/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
 
 ## 合集元数据
 
@@ -389,13 +392,13 @@ catalog/<作者>/
 
 ## 插件市场如何消费本合集
 
-市场先读合集元数据与插件目录,再逐层取清单、用根证书把 `certs/awesome-dsc-plugin-eec.crt` 收进信任锚,校验清单签名后再取插件文件与产物签名。下表是本仓库对外承诺的路径契约,市场按 `base_url` 依次取用。
+市场先读合集元数据与插件目录,再逐层取清单、用根证书把 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 收进信任锚,校验清单签名后再取插件文件与产物签名。下表是本仓库对外承诺的路径契约,市场按 `base_url` 依次取用。
 
 | 步骤 | 路径 | 用途 |
 |:---:|:---:|:---:|
 | 1 | `<base_url>/meta.json` | 判断该来源是否启用下载计数 |
 | 2 | `<base_url>/plugins.json` | 插件目录索引:列出全部插件、作者与标签 |
-| 3 | `<base_url>/certs/awesome-dsc-plugin-eec.crt` | 取合集终端签名证书,用根证书校验证书链;根目录没有 `eec.pem` |
+| 3 | `<base_url>/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | 取合集终端签名证书,用根证书校验证书链;根目录没有 `eec.pem` |
 | 4 | `<base_url>/manifest.json` 与 `manifest.json.sig` | 校验 L1 清单签名与其中记录的 SHA-512 |
 | 5 | `<base_url>/plugins/<author>/manifest.json` 与 `manifest.json.sig` | 校验 L2 清单,拿到作者公钥与插件清单 |
 | 6 | `<base_url>/plugins/<author>/<plugin>/manifest.json` 与 `manifest.json.sig` | 校验 L3 清单,拿到 `versions.json` 与各版本 `meta.json` 的摘要 |
@@ -412,7 +415,7 @@ catalog/<作者>/
 
 本合集托管在 GitHub Pages。Pages 对静态资源默认返回 `Access-Control-Allow-Origin: *`,因此分发内容天然可以被跨域读取,托管侧无法把来源收窄到白名单。这是托管平台的既定行为,不是本仓库的配置。
 
-规范要求跨域来源仅开放信任的来源,至少包含 `https://omdsc-dev.github.io`。若把分发内容改放到其他托管,需要自行配置 CORS 白名单,至少放行该来源。
+规范要求跨域来源仅开放信任的来源,至少包含 `https://omds-chat.github.io`。若把分发内容改放到其他托管,需要自行配置 CORS 白名单,至少放行该来源。
 
 ## 本地校验
 
@@ -439,7 +442,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
   EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
     node scripts/build-from-catalog.mjs \
     --catalog catalog --certs certs --site site/dist --out dist/pages \
-    --published-base https://omdsc-dev.github.io/awesome-dsc-plugin/
+    --published-base https://omds-chat.github.io/awesome-dsc-plugin/
   ```
 
 - 单独跑某一步:`pnpm verify:consistency` 交叉校验 `dist/pages` 的收录信息;`node scripts/report-build-anomalies.mjs --dry-run` 只打印上报请求体,不发真实请求,补报时去掉 `--dry-run` 并设置 `GITHUB_TOKEN`。
@@ -450,7 +453,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 - 签名不通过时插件市场会警告用户并建议重新下载,不会静默运行。
 - 收录不等于认证。签名只证明分发内容与签名者一致,不代表插件行为经过审查。
 - 私钥只放 CI secrets 与本地环境变量,不要提交。EEC 私钥放在 `EEC_SECRET_KEY`,根证书私钥永远不进本仓库。`.gitignore` 已排除 `.env`。
-- 更换 EEC 密钥对必须同时换 `certs/awesome-dsc-plugin-eec.crt` 并向 DeepSeek-Chat-Enhanced 仓库重新申请签发;旧证书签出的 CMS 签名将无法再验证。
+- 更换 EEC 密钥对必须同时换 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 并向 DeepSeek-Chat-Enhanced 仓库重新申请签发;旧证书签出的 CMS 签名将无法再验证。
 - 清单签名与产物签名覆盖文件字节。换行、缩进或空白的任何改动都会让校验失败,仓库统一使用 LF,作者产物也必须是 LF。
 - 插件产物建议行压缩,既减小体积,也避免无意义的空白差异。
 

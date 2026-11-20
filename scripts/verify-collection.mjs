@@ -24,7 +24,7 @@ function usage() {
     '选项:',
     '  --dir <目录>                合集根目录,默认当前目录',
     '  --root-ca <路径>            根证书路径,用于校验证书链与 CMS 签名',
-    '  --allow-placeholder-eec     骨架模式:根证书缺失、certs/awesome-dsc-plugin-eec.crt 未由根 CA 签发、清单或清单签名缺失时只警告',
+    '  --allow-placeholder-eec     骨架模式:根证书缺失、certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt 未由根 CA 签发、清单或清单签名缺失时只警告',
     '  --allow-missing-manifest    只放开三层清单与清单签名缺失,结构与哈希检查照常执行',
     '  --collection-name <名称>    合集名称,默认取合集目录名',
     '  --json                      以 JSON 输出校验结果',

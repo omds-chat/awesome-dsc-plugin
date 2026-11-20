@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://omdsc-dev.github.io/awesome-dsc-plugin/schemas/catalog-index.schema.json",
+  "$id": "https://omds-chat.github.io/awesome-dsc-plugin/schemas/catalog-index.schema.json",
   "title": "dsc-plugin-collection-catalog-index",
   "description": "pages 包 catalog/index.json 的结构。由构建按本次实际收录的作者与插件生成,供站点与外部查阅使用;被剔除的插件不进入本文件。",
   "type": "object",
@@ -188,28 +188,28 @@
       },
       "authors": [
         {
-          "username": "omdsc-dev",
-          "profile": "https://github.com/omdsc-dev",
+          "username": "omds-chat",
+          "profile": "https://github.com/omds-chat",
           "plugin_count": 1,
           "plugins": [
             {
               "name": "dsc-plugin-gallery",
               "description": "把对话里的图片整理成画廊视图。",
               "license": "Apache-2.0",
-              "repo_link": "https://github.com/omdsc-dev/dsc-plugin-gallery",
-              "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/"
+              "repo_link": "https://github.com/omds-chat/dsc-plugin-gallery",
+              "base_url": "https://omds-chat.github.io/dsc-plugin-gallery/"
             }
           ]
         }
       ],
       "plugins": [
         {
-          "author": "omdsc-dev",
+          "author": "omds-chat",
           "name": "dsc-plugin-gallery",
           "description": "把对话里的图片整理成画廊视图。",
           "license": "Apache-2.0",
-          "repo_link": "https://github.com/omdsc-dev/dsc-plugin-gallery",
-          "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+          "repo_link": "https://github.com/omds-chat/dsc-plugin-gallery",
+          "base_url": "https://omds-chat.github.io/dsc-plugin-gallery/",
           "current_version": "1.0.0",
           "tags": [
             "ui-enhance"

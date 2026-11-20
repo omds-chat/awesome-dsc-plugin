@@ -23,7 +23,7 @@ concurrency:
 #   secrets.EEC_SECRET_KEY  终端签名证书私钥(ECDSA P-256),只在本流程内存与临时目录中出现;
 #   secrets.ROOT_CA_PEM     根证书 PEM,用于校验证书链与全部 CMS 签名,不是私钥。
 # 根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,绝不出现在本流程。
-# 合集证书的固定位置是 certs/awesome-dsc-plugin-eec.crt;pages 根目录不放 eec.pem。
+# 合集证书的固定位置是 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt;pages 根目录不放 eec.pem。
 env:
   EEC_SECRET_KEY: ${{ secrets.EEC_SECRET_KEY }}
   EEC_CERT_PEM: ${{ secrets.EEC_CERT_PEM }}
@@ -78,11 +78,11 @@ jobs:
           echo "ROOT_CA_PATH=$target" >> "$GITHUB_ENV"
 
       # 证书与私钥都从 secrets 注入:私钥只在签名时使用;
-      # 证书默认用 main 分支的 certs/awesome-dsc-plugin-eec.crt,提供 secrets.EEC_CERT_PEM 时以 secret 为准。
+      # 证书默认用 main 分支的 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt,提供 secrets.EEC_CERT_PEM 时以 secret 为准。
       - name: Install EEC certificate
         run: |
           set -euo pipefail
-          target="certs/awesome-dsc-plugin-eec.crt"
+          target="certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt"
           if [ -n "${EEC_CERT_PEM:-}" ]; then
             printf '%s\n' "$EEC_CERT_PEM" > "$target"
             echo "终端签名证书来源: secrets.EEC_CERT_PEM"
@@ -96,7 +96,7 @@ jobs:
       - name: Verify EEC against root CA
         run: |
           set -euo pipefail
-          eec="certs/awesome-dsc-plugin-eec.crt"
+          eec="certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt"
           openssl verify -CAfile "$ROOT_CA_PATH" "$eec"
           openssl x509 -in "$eec" -noout -subject -issuer -enddate
           openssl x509 -in "$eec" -noout -ext keyUsage
@@ -143,7 +143,7 @@ jobs:
       - name: Verify manifests and plugin signatures with openssl
         run: |
           set -euo pipefail
-          eec="dist/pages/certs/awesome-dsc-plugin-eec.crt"
+          eec="dist/pages/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt"
           test -f "$eec"
           manifests=0
           while IFS= read -r manifest; do
@@ -184,7 +184,7 @@ jobs:
           test -d dist/pages/assets
           test -f dist/pages/meta.json
           test -f dist/pages/tags.json
-          test -f dist/pages/datalog.json
+          test -f dist/pages/plugins.json
           test -f dist/pages/manifest.json
           test -f dist/pages/manifest.json.sig
           test -d dist/pages/catalog
@@ -192,9 +192,15 @@ jobs:
           test -f dist/pages/catalog/anomalies.json
           test -f dist/pages/catalog/removed.json
           test -d dist/pages/certs
-          test -f dist/pages/certs/awesome-dsc-plugin-eec.crt
+          for stray in dist/pages/certs/*; do
+            if [ ! -d "$stray" ]; then
+              echo "::error::certs/ 下只允许来源文件夹,发现散落文件: $stray"
+              exit 1
+            fi
+          done
+          test -f dist/pages/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt
           if [ -e dist/pages/eec.pem ]; then
-            echo "::error::pages 根目录不得包含 eec.pem,合集证书只在 certs/awesome-dsc-plugin-eec.crt"
+            echo "::error::pages 根目录不得包含 eec.pem,合集证书只在 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt"
             exit 1
           fi
           test -f dist/pages/plugins/author_manifest.json

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://omdsc-dev.github.io/awesome-dsc-plugin/schemas/catalog-author.schema.json",
+  "$id": "https://omds-chat.github.io/awesome-dsc-plugin/schemas/catalog-author.schema.json",
   "title": "dsc-plugin-collection-catalog-author",
   "description": "catalog/<作者>/author.json 的结构。只登记作者身份与公钥所在目录,不描述插件本身。",
   "type": "object",
@@ -25,8 +25,8 @@
   "additionalProperties": false,
   "examples": [
     {
-      "username": "omdsc-dev",
-      "profile": "https://github.com/omdsc-dev"
+      "username": "omds-chat",
+      "profile": "https://github.com/omds-chat"
     }
   ]
 }

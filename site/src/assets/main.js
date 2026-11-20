@@ -191,7 +191,7 @@ async function boot() {
     const collection = await loadCollection();
     state.collection = collection;
     if (collection.authors.length === 0) {
-      setStatus("页面内没有读到作者与插件:catalog/index.json、plugins/author_manifest.json 与 datalog.json 都不可用。", "warn");
+      setStatus("页面内没有读到作者与插件:catalog/index.json、plugins/author_manifest.json 与 plugins.json 都不可用。", "warn");
     } else {
       setStatus("已读取 " + collection.authors.length + " 位作者、" + pluginCountOf(collection) + " 个插件;数据来自 " + collection.source + "。");
     }

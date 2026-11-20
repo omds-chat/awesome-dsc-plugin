@@ -10,7 +10,8 @@ import { join } from 'node:path'
 import { AUTHOR_NAME_PATTERN, describeAuthorNameProblem } from './catalog.mjs'
 import { problem } from './layer-manifests.mjs'
 import {
-  EEC_CERT_BASENAME,
+  EEC_CERT_REL_IN_CERTS,
+  EEC_PUB_REL_IN_CERTS,
   describeCertificate,
   describePublicKey,
   hasDigitalSignature,
@@ -19,8 +20,6 @@ import {
 
 /** 已下架插件清单文件名 */
 export const REMOVED_FILE = 'removed.json'
-/** 与 EEC 私钥配对的公钥材料文件名,可选 */
-export const SECRET_PUB_FILE = 'awesome-dsc-plugin-secret.pub'
 /** 插件名合法形式:与 lib/catalog.mjs 保持一致 */
 export const PLUGIN_NAME_PATTERN = /^(?:dsc-[a-z0-9][a-z0-9._-]*|@[a-z0-9][a-z0-9._-]*\/dsc-[a-z0-9][a-z0-9._-]*)$/
 /** removed.json 每条记录必填字段,与 schemas/catalog-removed.schema.json 一致 */
@@ -245,6 +244,51 @@ export function checkPluginDirectories(plugins, problems) {
 }
 
 /**
+ * 校验 certs/ 的目录布局:certs/ 下只允许来源文件夹,证书与公钥放在 certs/<来源 id>/<文件名>;
+ * 文件夹名即来源 id,目录内的文件名必须以 <来源 id>- 开头,
+ * 且只允许证书(.crt)与公钥(.pub),私钥一律不得入库。
+ * @param {object} context 上下文
+ * @param {string} context.certsDir 证书目录
+ * @param {Array<object>} context.problems 问题收集数组
+ * @returns {void}
+ */
+export function checkCertsLayout({ certsDir, problems }) {
+  for (const entry of readdirSync(certsDir, { withFileTypes: true })) {
+    if (!entry.isDirectory()) {
+      problems.push(
+        problem(
+          'error',
+          'CERTS_STRAY_FILE',
+          'certs/ 下只允许来源文件夹,' + entry.name + ' 应放进 certs/<来源 id>/',
+          'certs/' + entry.name,
+        ),
+      )
+      continue
+    }
+    const sourceId = entry.name
+    for (const file of readdirSync(join(certsDir, sourceId), { withFileTypes: true })) {
+      const rel = 'certs/' + sourceId + '/' + file.name
+      if (file.isDirectory()) {
+        problems.push(
+          problem('error', 'CERTS_NESTED_DIR', rel + ' 不要再嵌套目录,certs/ 只有 certs/<来源 id>/<文件名> 两层', rel),
+        )
+        continue
+      }
+      if (!file.name.startsWith(sourceId + '-')) {
+        problems.push(
+          problem('error', 'CERTS_FILE_NAME', rel + ' 的文件名必须以 ' + sourceId + '- 开头', rel),
+        )
+      }
+      if (!file.name.endsWith('.crt') && !file.name.endsWith('.pub')) {
+        problems.push(
+          problem('error', 'CERTS_PRIVATE_MATERIAL', rel + ' 既不是证书(.crt)也不是公钥(.pub),certs/ 不得存放私钥', rel),
+        )
+      }
+    }
+  }
+}
+
+/**
  * 校验 certs/:合集证书必须存在、未过期、keyUsage 含 digitalSignature、basicConstraints 不是 CA;
  * 给出根证书时还要校验签发链。配对公钥可选,存在就必须能被 OpenSSL 解析。
  * @param {object} context 上下文
@@ -260,8 +304,10 @@ export function checkCerts({ certsDir, rootCaPath, problems }) {
     return stats
   }
 
-  const eecPath = join(certsDir, EEC_CERT_BASENAME)
-  const eecRel = 'certs/' + EEC_CERT_BASENAME
+  checkCertsLayout({ certsDir, problems })
+
+  const eecPath = join(certsDir, EEC_CERT_REL_IN_CERTS)
+  const eecRel = 'certs/' + EEC_CERT_REL_IN_CERTS
   if (!isFile(eecPath)) {
     problems.push(problem('error', 'EEC_CERT_MISSING', '缺少合集终端签名证书:' + eecRel, eecRel))
   } else {
@@ -293,8 +339,8 @@ export function checkCerts({ certsDir, rootCaPath, problems }) {
     }
   }
 
-  const pubPath = join(certsDir, SECRET_PUB_FILE)
-  const pubRel = 'certs/' + SECRET_PUB_FILE
+  const pubPath = join(certsDir, EEC_PUB_REL_IN_CERTS)
+  const pubRel = 'certs/' + EEC_PUB_REL_IN_CERTS
   if (isFile(pubPath)) {
     stats.secretPub = true
     try {

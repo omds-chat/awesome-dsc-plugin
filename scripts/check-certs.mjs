@@ -2,7 +2,8 @@
 /**
  * 自查:certs 证书链与终端签名证书。
  *
- * 复用 lib/catalog-checks.mjs 的 checkCerts:合集证书存在、未过期、keyUsage 含 digitalSignature、
+ * 复用 lib/catalog-checks.mjs 的 checkCerts:certs/ 只放来源文件夹,合集证书固定在
+ * certs/<来源 id>/<来源 id>-eec.crt,必须存在、未过期、keyUsage 含 digitalSignature、
  * basicConstraints 非 CA;给出根证书时校验签发链;配对公钥存在就必须能解析。
  * 不给根证书时签发链只记警告。
  *

@@ -5,10 +5,10 @@
   "type": "module",
   "description": "dsc 社区插件合集: 按分发规范 v2 收录、签名并分发插件",
   "license": "Apache-2.0",
-  "homepage": "https://omdsc-dev.github.io/awesome-dsc-plugin/",
+  "homepage": "https://omds-chat.github.io/awesome-dsc-plugin/",
   "repository": {
     "type": "git",
-    "url": "https://github.com/omdsc-dev/awesome-dsc-plugin.git"
+    "url": "https://github.com/omds-chat/awesome-dsc-plugin.git"
   },
   "engines": {
     "node": ">=20"

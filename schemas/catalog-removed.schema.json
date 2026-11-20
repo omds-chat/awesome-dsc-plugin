@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://omdsc-dev.github.io/awesome-dsc-plugin/schemas/catalog-removed.schema.json",
+  "$id": "https://omds-chat.github.io/awesome-dsc-plugin/schemas/catalog-removed.schema.json",
   "title": "dsc-plugin-collection-catalog-removed",
   "description": "catalog/removed.json 的结构:记录已解除托管的插件。作者下架作品时删除自己的 catalog 目录,并在本文件追加一条。",
   "type": "array",
@@ -39,7 +39,7 @@
     [
       {
         "name": "dsc-plugin-gallery",
-        "base_url": "https://omdsc-dev.github.io/dsc-plugin-gallery/",
+        "base_url": "https://omds-chat.github.io/dsc-plugin-gallery/",
         "removed_in": "v2.0.0",
         "note": "作者改为独立分发,不再随本合集发布。"
       }

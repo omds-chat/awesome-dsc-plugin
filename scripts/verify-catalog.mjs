@@ -5,7 +5,7 @@
  * 本仓库不再在根目录保存 pages 包的基线文件(plugins.json、manifest.json、plugins/),
  * 因此仓库级校验只看两处源数据:
  *   catalog/   收录登记(author.json、author_pub.pem、plugin.json、removed.json)
- *   certs/     信任材料(合集终端签名证书,可选配对公钥)
+ *   certs/     信任材料,只放来源文件夹:certs/<来源 id>/<来源 id>-eec.crt 与同目录的配对公钥,私钥不入库
  * 合集设置(site/meta.json、site/tags.json)只用于标签取值判断,不做结构以外的检查。
  *
  * 作者目录名的大小写不敏感唯一性由 lib/catalog.mjs 的 readCatalog 报(AUTHOR_NAME_COLLISION),

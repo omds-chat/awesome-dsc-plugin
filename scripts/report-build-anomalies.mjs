@@ -13,7 +13,7 @@
  * 都只打印警告并以 0 退出,绝不让发布失败。
  *
  * 用法:
- *   GITHUB_TOKEN=... GITHUB_REPOSITORY=omdsc-dev/awesome-dsc-plugin \
+ *   GITHUB_TOKEN=... GITHUB_REPOSITORY=omds-chat/awesome-dsc-plugin \
  *     node scripts/report-build-anomalies.mjs \
  *       --anomalies dist/pages/catalog/anomalies.json --tag v1.0.0
  *
@@ -134,7 +134,7 @@ export function buildIssueBody(report, tag) {
     '|:---:|:---:|:---:|:---:|',
     ...(rows.length > 0 ? rows : ['| - | - | - | - |']),
     '',
-    '已自动剔除、未阻塞发布:上表中的插件没有写入本次 pages 包,也不出现在 datalog.json、' +
+    '已自动剔除、未阻塞发布:上表中的插件没有写入本次 pages 包,也不出现在 plugins.json、' +
       'catalog/index.json 与 plugins/ 树里,其余插件照常发布。',
     '',
     '登记不合规(catalog 文件本身不合法)不走这条路径:遇到登记错误构建会直接中止,等待作者修正后再发布。',

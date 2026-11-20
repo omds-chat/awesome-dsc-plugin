@@ -45,7 +45,7 @@ function usage() {
     '  --out <目录>                分发内容输出目录,默认 dist',
     '  --root-ca <路径>            根证书路径,用于校验证书链与 CMS 签名',
     '  --sign                      用 EEC_SECRET_KEY 为每个版本的 meta.json 与 plugin.js 签名',
-    '  --allow-placeholder-eec     骨架模式:根证书缺失或 certs/awesome-dsc-plugin-eec.crt 未由根 CA 签发时只警告',
+    '  --allow-placeholder-eec     骨架模式:根证书缺失或 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt 未由根 CA 签发时只警告',
     '  --collection-name <名称>    合集名称,默认取合集目录名',
     '  --help                      显示本说明',
     '',
@@ -157,7 +157,7 @@ function prepareSigner(root, problems) {
         problem(
           'error',
           'SIGN_KEY_MISMATCH',
-          'EEC_SECRET_KEY 与 ' + eec.relative + ' 不是同一把密钥;请确认 certs/awesome-dsc-plugin-eec.crt 与 CI secret 配对',
+          'EEC_SECRET_KEY 与 ' + eec.relative + ' 不是同一把密钥;请确认 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt 与 CI secret 配对',
           eec.relative,
         ),
       )

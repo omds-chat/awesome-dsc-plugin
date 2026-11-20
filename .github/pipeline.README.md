@@ -13,7 +13,8 @@
 
 ## 二、证书位置
 
-合集终端签名证书(EEC)的固定位置是 `certs/awesome-dsc-plugin-eec.crt`,对应私钥只从 CI secret `EEC_SECRET_KEY` 注入。
+合集终端签名证书(EEC)的固定位置是 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,对应私钥只从 CI secret `EEC_SECRET_KEY` 注入。
+`certs/` 下只允许来源文件夹,证书与公钥放在 `certs/<来源 id>/<文件名>` 下,文件夹名即来源 id,文件名以 `<来源 id>-` 开头:证书是 `<来源 id>-eec.crt`,配对公钥是 `<来源 id>-eec-secret.pub`。私钥一律不入库,仓库级校验会拦住散落在 `certs/` 根上的文件、命名不合规的文件与非证书非公钥的材料。
 pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `secrets.ROOT_CA_PEM` 或 `vars.ROOT_CA_URL` 提供,只用于自检。
 
 三层清单签名与每个 `plugin.js.sig` 都用同一张 EEC,命令固定为
@@ -28,7 +29,7 @@ pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `
 | `plugins.json` | 插件目录索引,由 `scripts/build-from-catalog.mjs` 按 catalog 生成 |
 | `manifest.json`、`manifest.json.sig` | L1 清单及其签名 |
 | `catalog/` | main 分支的 catalog 目录复制进来的登记文件,含根目录的 `README.md` 与 `removed.json`,本次剔除的作者与插件不复制;另加构建生成的 `index.json`(汇总索引)与 `anomalies.json`(剔除清单) |
-| `certs/` | main 分支的 certs 目录,原样复制 |
+| `certs/` | main 分支的 certs 目录,原样复制;下只含来源文件夹 `certs/<来源 id>/` |
 | `plugins/` | 由 CI 依据 catalog 拉取并构建 |
 
 plugins 树:
@@ -79,7 +80,7 @@ pnpm build:site
 EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
   node scripts/build-from-catalog.mjs \
   --catalog catalog --certs certs --site site/dist --out dist/pages \
-  --published-base https://omdsc-dev.github.io/awesome-dsc-plugin/
+  --published-base https://omds-chat.github.io/awesome-dsc-plugin/
 
 # pages 包校验:三层清单、清单签名、产物签名与收录信息交叉一致性
 pnpm verify:bundle --root-ca root_ca.crt
@@ -87,7 +88,7 @@ pnpm verify:bundle --root-ca root_ca.crt
 # 独立验签
 openssl cms -verify -binary -md sha512 -inform DER \
   -in dist/pages/manifest.json.sig -content dist/pages/manifest.json \
-  -CAfile root_ca.crt -certfile dist/pages/certs/awesome-dsc-plugin-eec.crt
+  -CAfile root_ca.crt -certfile dist/pages/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt
 ```
 
 流水线步骤依次为:安装依赖、仓库级校验(`verify:catalog`)、构建 site、拉取插件、用 EEC 重新签名 `plugin.js`、生成并签名三层清单、

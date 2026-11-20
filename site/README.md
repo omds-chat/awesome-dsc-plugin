@@ -51,28 +51,28 @@
   "collection": { "name": "awesome-dsc-plugin", "release": "v2.0.0" },
   "authors": [
     {
-      "username": "omdsc-dev",
-      "profile": "https://github.com/omdsc-dev",
+      "username": "omds-chat",
+      "profile": "https://github.com/omds-chat",
       "plugin_count": 1,
       "plugins": [
         {
           "name": "dsc-demo",
           "description": "一句话说明",
           "license": "Apache-2.0",
-          "repo_link": "https://github.com/omdsc-dev/dsc-demo",
-          "base_url": "https://omdsc-dev.github.io/dsc-demo/"
+          "repo_link": "https://github.com/omds-chat/dsc-demo",
+          "base_url": "https://omds-chat.github.io/dsc-demo/"
         }
       ]
     }
   ],
   "plugins": [
     {
-      "author": "omdsc-dev",
+      "author": "omds-chat",
       "name": "dsc-demo",
       "description": "一句话说明",
       "license": "Apache-2.0",
-      "repo_link": "https://github.com/omdsc-dev/dsc-demo",
-      "base_url": "https://omdsc-dev.github.io/dsc-demo/",
+      "repo_link": "https://github.com/omds-chat/dsc-demo",
+      "base_url": "https://omds-chat.github.io/dsc-demo/",
       "current_version": "1.0.0",
       "tags": ["ui-enhance"],
       "version_count": 1

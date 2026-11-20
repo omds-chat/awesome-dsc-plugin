@@ -6,7 +6,7 @@ The dsc community plugin collection. Plugins are indexed, signed and distributed
 
 ## Scope
 
-This collection targets dsc runtime plugins and is maintained by omdsc-dev. This repository is omdsc-dev's end-entity signer (EEC): it holds an end-entity signing certificate issued by the root CA of the DeepSeek-Chat-Enhanced repository and uses it to produce detached CMS signatures for the three manifest layers and for every plugin artifact.
+This collection targets dsc runtime plugins and is maintained by omds-chat. This repository is omds-chat's end-entity signer (EEC): it holds an end-entity signing certificate issued by the root CA of the DeepSeek-Chat-Enhanced repository and uses it to produce detached CMS signatures for the three manifest layers and for every plugin artifact.
 
 Inclusion criteria:
 
@@ -33,7 +33,9 @@ The collection is published as a pages bundle: on every Release CI pulls the plu
 ├── manifest.json.sig                  # L1 manifest signature
 ├── catalog/                           # registrations copied over (removed.json included), plus the generated index.json and anomalies.json; covered by no manifest
 ├── certs/                             # trust material, copied verbatim, covered by no manifest
-│   └── awesome-dsc-plugin-eec.crt     # collection end-entity signing certificate, issued by the root CA
+│   └── awesome-dsc-plugin/            # source folder, named after the source id; holds the certificate and its matching public key
+│       ├── awesome-dsc-plugin-eec.crt          # collection end-entity signing certificate (EEC), issued by the root CA
+│       └── awesome-dsc-plugin-eec-secret.pub   # public key matching the EEC private key
 └── plugins/
     ├── author_manifest.json           # L1
     └── <author>/
@@ -52,7 +54,7 @@ The collection is published as a pages bundle: on every Release CI pulls the plu
                 └── plugin.js.author.sig # author bare public key signature, optional
 ```
 
-There is no `eec.pem` in the root any more: the collection certificate lives at `certs/awesome-dsc-plugin-eec.crt`, ships with the pages bundle and is covered by no manifest; the root certificate is not distribution content either.
+There is no `eec.pem` in the root any more: the collection certificate lives at `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`, ships with the pages bundle and is covered by no manifest; the root certificate is not distribution content either. `certs/` holds source folders only, with each certificate and public key placed at `certs/<source id>/<file name>`; the folder name is the source id and every file name starts with `<source id>-`; private keys are never committed.
 
 Collection settings live in `site/`: `site/meta.json` and `site/tags.json` are the only sources of the same-named files in the pages bundle and are copied over verbatim. `plugins.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are build output that exists only inside the pages bundle; the repository root keeps none of them and no baselines stand in for them.
 
@@ -94,13 +96,13 @@ The required and optional files of each location inside the pages bundle. They e
 | Location | Required | Optional |
 |:---:|:---:|:---:|
 | pages bundle root | `meta.json`, `plugins.json`, `plugins/author_manifest.json`, `manifest.json`, `manifest.json.sig` | `tags.json` |
-| `certs/` | `awesome-dsc-plugin-eec.crt`, covered by no manifest | `awesome-dsc-plugin-secret.pub`, likewise covered by none |
+| `certs/<source id>/` | `<source id>-eec.crt`, covered by no manifest | `<source id>-eec-secret.pub`, likewise covered by none |
 | `catalog/` | every author's `author.json`, `author_pub.pem` and `<plugin>/plugin.json`, copied verbatim and covered by no manifest | none |
 | `plugins/<author>/` | `plugin_manifest.json`, `manifest.json`, `manifest.json.sig` | `author_pub.pem` |
 | `plugins/<author>/<plugin>/` | `versions.json`, `manifest.json`, `manifest.json.sig` | none |
 | `plugins/<author>/<plugin>/<x.y.z>/` | `meta.json`, `plugin.js`, `plugin.js.sig` | `plugin.js.author.sig` |
 
-Directory naming, the `versions.json` shape and the `meta.json` fields are documented in [.github/bundle-layout.README.md](.github/bundle-layout.README.md). The collection certificate lives only at `certs/awesome-dsc-plugin-eec.crt` and the root no longer carries an `eec.pem`; it only proves who signed and is covered by no manifest. The root certificate is not part of distribution content: it is distributed through the online-data branch and pinned by fingerprint inside the web client.
+Directory naming, the `versions.json` shape and the `meta.json` fields are documented in [.github/bundle-layout.README.md](.github/bundle-layout.README.md). The collection certificate lives only at `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` and the root no longer carries an `eec.pem`; it only proves who signed and is covered by no manifest. The root certificate is not part of distribution content: it is distributed through the online-data branch and pinned by fingerprint inside the web client.
 
 ## Signing and verification
 
@@ -110,9 +112,9 @@ The scheme is built on OpenSSL PKI, with three roles each holding one key, so wh
 
 | Role | Holder | Material | Signs |
 |:---:|:---:|:---:|:---:|
-| Root CA | `DeepSeek-Chat-Enhanced` repository (the organisation mainline) | root private key (offline, never committed), root certificate | end-entity signing certificate `certs/awesome-dsc-plugin-eec.crt` |
-| End-entity signer (EEC) | this repository | EEC private key (CI secret `EEC_SECRET_KEY`), `certs/awesome-dsc-plugin-eec.crt` | detached CMS signatures for the three manifests and every version's `plugin.js` |
-| Independent signer | plugin authors, omdsc-dev included | author key pair | bare public key signature over `plugin.js` |
+| Root CA | `DeepSeek-Chat-Enhanced` repository (the organisation mainline) | root private key (offline, never committed), root certificate | end-entity signing certificate `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` |
+| End-entity signer (EEC) | this repository | EEC private key (CI secret `EEC_SECRET_KEY`), `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | detached CMS signatures for the three manifests and every version's `plugin.js` |
+| Independent signer | plugin authors, omds-chat included | author key pair | bare public key signature over `plugin.js` |
 
 ### Certificate chain
 
@@ -123,7 +125,7 @@ DeepSeek-Chat-Enhanced repository (root CA, offline)
   root_ca.crt
       │  issues
       ▼
-  this repository's certs/awesome-dsc-plugin-eec.crt (end-entity signing certificate)
+  this repository's certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt (end-entity signing certificate)
       │  openssl cms -sign -binary -md sha512 -outform DER -nocerts -noattr
       ▼
   manifest.json.sig          L1 manifest signature
@@ -158,8 +160,8 @@ Both curves are hard constraints rather than preferences: switching to Ed25519 b
 Collection signing and verification. The three manifests and `plugin.js` share one command and differ only in the file name:
 
 ```bash
-openssl cms -sign -binary -md sha512 -outform DER -in manifest.json -out manifest.json.sig -signer certs/awesome-dsc-plugin-eec.crt -inkey eec_secret.pem -nocerts -noattr
-openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -content manifest.json -CAfile root_ca.crt -certfile certs/awesome-dsc-plugin-eec.crt
+openssl cms -sign -binary -md sha512 -outform DER -in manifest.json -out manifest.json.sig -signer certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt -inkey eec_secret.pem -nocerts -noattr
+openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -content manifest.json -CAfile root_ca.crt -certfile certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt
 ```
 
 `-md sha512` pins the digest algorithm instead of relying on the OpenSSL default, and `-outform DER` is not optional. The default output is an S/MIME `multipart/signed` wrapper, which browsers cannot parse, and the plugin market verifies signatures in the browser. DER is therefore the cross-repository format: signers always pass `-outform DER` and verifiers always pass `-inform DER`, and either side falling back to the default format breaks verification. Confirm the artifact with `openssl asn1parse -inform DER -in manifest.json.sig`.
@@ -182,17 +184,17 @@ Author signatures are optional. Without one, a version carries only this reposit
 
 | # | Rule |
 |:---:|:---:|
-| 1 | The collection certificate `certs/awesome-dsc-plugin-eec.crt` exists (the root no longer carries an `eec.pem`), chains to the given root certificate (`--root-ca` or `ROOT_CA_PATH`), is not expired, has `digitalSignature` in `keyUsage` and is not a CA |
+| 1 | The collection certificate `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` exists (the root no longer carries an `eec.pem`), chains to the given root certificate (`--root-ca` or `ROOT_CA_PATH`), is not expired, has `digitalSignature` in `keyUsage` and is not a CA |
 | 2 | Every plugin in the plugin index `plugins.json` appears in `plugins/<author>/plugin_manifest.json` and its plugin directory exists |
 | 3 | Every plugin directory has `versions.json` and `latest` is present in `versions` |
-| 4 | Every version directory has `meta.json`, `plugin.js` and `plugin.js.sig`, verified with `openssl cms -verify -binary -md sha512 -inform DER -CAfile <root> -certfile certs/awesome-dsc-plugin-eec.crt`; a failure is an error |
+| 4 | Every version directory has `meta.json`, `plugin.js` and `plugin.js.sig`, verified with `openssl cms -verify -binary -md sha512 -inform DER -CAfile <root> -certfile certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`; a failure is an error |
 | 5 | When `plugin.js.author.sig` exists in a version directory, `plugins/<author>/author_pub.pem` must exist and the signature must verify with `openssl pkeyutl -verify`; a failure is an error. Other `*.author.sig` files are not checked |
 | 6 | When `tags.json` exists, every `tag` in the plugin index `plugins.json` comes from it |
 | 7 | All three manifests exist and are structurally valid: `schemaVersion` is 1, `revision` is a positive integer, `files` is a non-empty array, and each entry holds only `path` and `sha512` |
 | 8 | Every `path` is valid: forward slashes, relative, no `..`, not the manifest itself, no duplicates |
 | 9 | Coverage matches the layer exactly: every required file is listed and nothing extra is, so L3 never lists `plugin.js` or `plugin.js.sig` |
 | 10 | Every recorded SHA-512 matches the file contents, and a mismatch names the layer and the file |
-| 11 | Every `manifest.json.sig` verifies against the root certificate and `certs/awesome-dsc-plugin-eec.crt`; a failure is an error |
+| 11 | Every `manifest.json.sig` verifies against the root certificate and `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`; a failure is an error |
 
 ### Verification semantics
 
@@ -208,15 +210,15 @@ The EEC certificate is issued by the root CA of the DeepSeek-Chat-Enhanced repos
 
    ```bash
    openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out eec_secret.pem
-   openssl req -new -key eec_secret.pem -out eec.csr -subj '/O=omdsc-dev/CN=awesome-dsc-plugin'
+   openssl req -new -key eec_secret.pem -out eec.csr -subj '/O=omds-chat/CN=awesome-dsc-plugin'
    ```
 
 2. Submit `eec.csr` to the DeepSeek-Chat-Enhanced repository (the root CA maintainer) with the purpose, validity period and contact.
-3. Write the issued certificate to `certs/awesome-dsc-plugin-eec.crt` in this repository; the root no longer carries an `eec.pem`.
+3. Write the issued certificate to `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` in this repository; the root no longer carries an `eec.pem`.
 4. Put the contents of `eec_secret.pem` into the GitHub Actions secret `EEC_SECRET_KEY`; never commit it.
-5. After merge, CI checks the chain of `certs/awesome-dsc-plugin-eec.crt` against the root certificate and aborts on a broken chain, an expired certificate, or a `keyUsage` or `basicConstraints` mismatch.
+5. After merge, CI checks the chain of `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` against the root certificate and aborts on a broken chain, an expired certificate, or a `keyUsage` or `basicConstraints` mismatch.
 
-The root private key lives in the offline environment of the DeepSeek-Chat-Enhanced repository; this repository and CI neither have nor need it. The committed `certs/awesome-dsc-plugin-eec.crt` carries public material only and is issued by that root CA; CI can also override it with the secret `EEC_CERT_PEM`, and the override still has to pass the chain check.
+The root private key lives in the offline environment of the DeepSeek-Chat-Enhanced repository; this repository and CI neither have nor need it. The committed `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` carries public material only and is issued by that root CA; CI can also override it with the secret `EEC_CERT_PEM`, and the override still has to pass the chain check.
 
 ## Maintainer self-check scripts
 
@@ -294,9 +296,10 @@ awesome-dsc-plugin/
 │       ├── author_pub.pem              author public key, Ed25519, OpenSSL PEM
 │       └── <plugin>/                   one directory per plugin
 │           └── plugin.json             plugin registration, holds base_url and optional tags
-├── certs/                              collection certificate, ships with the bundle, covered by no manifest
-│   ├── awesome-dsc-plugin-eec.crt      collection end-entity signing certificate (EEC), issued by the root CA
-│   └── awesome-dsc-plugin-secret.pub   public key material matching the EEC private key
+├── certs/                              certificate source folders, shipped with the bundle, covered by no manifest
+│   └── awesome-dsc-plugin/             source folder, named after the source id; holds the certificate and its matching public key
+│       ├── awesome-dsc-plugin-eec.crt
+│       └── awesome-dsc-plugin-eec-secret.pub
 ├── schemas/                            every JSON Schema of this repository
 │   ├── README.md                       schema index
 │   ├── manifest.schema.json            JSON Schema of the three manifests
@@ -335,7 +338,7 @@ awesome-dsc-plugin/
     └── src/                            site source: index.html and assets/
 ```
 
-The repository root holds only `catalog/`, `certs/`, `schemas/`, `scripts/`, `site/` and the engineering files; `plugins.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are never committed and exist only inside the built pages bundle, with page data, manifests and signatures produced by CI at Release time. Collection settings and site settings both live in `site/`: the collection metadata is `site/meta.json`, the preset tags are `site/tags.json`, and the showcase site project is `site/`. `dist/`, `site/dist/` and `temp/` are pure generated directories and are not committed. The verification semantics of `scripts/lib/collection-verify.mjs` and `scripts/pki.mjs` follow [awesome-dsc-plugin-set-template](https://github.com/omdsc-dev/awesome-dsc-plugin-set-template): change the template first and then sync this repository, so the two never drift.
+The repository root holds only `catalog/`, `certs/`, `schemas/`, `scripts/`, `site/` and the engineering files; `plugins.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are never committed and exist only inside the built pages bundle, with page data, manifests and signatures produced by CI at Release time. Collection settings and site settings both live in `site/`: the collection metadata is `site/meta.json`, the preset tags are `site/tags.json`, and the showcase site project is `site/`. `dist/`, `site/dist/` and `temp/` are pure generated directories and are not committed. The verification semantics of `scripts/lib/collection-verify.mjs` and `scripts/pki.mjs` follow [awesome-dsc-plugin-set-template](https://github.com/omds-chat/awesome-dsc-plugin-set-template): change the template first and then sync this repository, so the two never drift.
 
 ## Collection metadata
 
@@ -389,13 +392,13 @@ Fields, the public key command, what happens after inclusion and the structural 
 
 ## How the plugin market consumes this collection
 
-The market reads collection metadata and the plugin catalog, then fetches each manifest, brings `certs/awesome-dsc-plugin-eec.crt` into the trust anchors through the root certificate, verifies the manifest signature and only then fetches plugin files and artifact signatures. The table below is the path contract this repository promises, consumed in order relative to `base_url`.
+The market reads collection metadata and the plugin catalog, then fetches each manifest, brings `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` into the trust anchors through the root certificate, verifies the manifest signature and only then fetches plugin files and artifact signatures. The table below is the path contract this repository promises, consumed in order relative to `base_url`.
 
 | Step | Path | Purpose |
 |:---:|:---:|:---:|
 | 1 | `<base_url>/meta.json` | Decide whether the source enables download counting |
 | 2 | `<base_url>/plugins.json` | The plugin index: every plugin, author and tag |
-| 3 | `<base_url>/certs/awesome-dsc-plugin-eec.crt` | Fetch the collection end-entity certificate and validate its chain against the root certificate; the root has no `eec.pem` |
+| 3 | `<base_url>/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | Fetch the collection end-entity certificate and validate its chain against the root certificate; the root has no `eec.pem` |
 | 4 | `<base_url>/manifest.json` and `manifest.json.sig` | Verify the L1 signature and the SHA-512 values it records |
 | 5 | `<base_url>/plugins/<author>/manifest.json` and `manifest.json.sig` | Verify the L2 manifest and obtain the author public key and plugin list |
 | 6 | `<base_url>/plugins/<author>/<plugin>/manifest.json` and `manifest.json.sig` | Verify the L3 manifest and obtain digests of `versions.json` and every version's `meta.json` |
@@ -412,7 +415,7 @@ Any failed check only raises a warning and never blocks plugin loading, matching
 
 The collection is hosted on GitHub Pages. Pages returns `Access-Control-Allow-Origin: *` for static assets by default, so distribution content is readable across origins and the host cannot narrow it to an allowlist. That is platform behaviour, not a setting of this repository.
 
-The specification requires cross-origin sources to be limited to trusted origins, at minimum `https://omdsc-dev.github.io`. Moving distribution content to another host means configuring a CORS allowlist that at least permits that origin.
+The specification requires cross-origin sources to be limited to trusted origins, at minimum `https://omds-chat.github.io`. Moving distribution content to another host means configuring a CORS allowlist that at least permits that origin.
 
 ## Local checks
 
@@ -439,7 +442,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages bundle check
   EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
     node scripts/build-from-catalog.mjs \
     --catalog catalog --certs certs --site site/dist --out dist/pages \
-    --published-base https://omdsc-dev.github.io/awesome-dsc-plugin/
+    --published-base https://omds-chat.github.io/awesome-dsc-plugin/
   ```
 
 - Single steps remain available: `pnpm verify:consistency` cross-checks the collected information in `dist/pages`; `node scripts/report-build-anomalies.mjs --dry-run` prints the reporting request body without sending anything, and a real re-report only needs `GITHUB_TOKEN` without `--dry-run`.
@@ -450,7 +453,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages bundle check
 - When a signature fails, the plugin market warns the user and suggests downloading again; it never runs silently.
 - Inclusion is not endorsement. A signature only proves that distributed content matches its signer, not that plugin behaviour was reviewed.
 - Keep private keys in CI secrets and local environment variables only. The EEC private key lives in `EEC_SECRET_KEY`; the root private key never enters this repository. `.gitignore` already excludes `.env`.
-- Replacing the EEC key pair requires replacing `certs/awesome-dsc-plugin-eec.crt` and requesting a new certificate from the DeepSeek-Chat-Enhanced repository; CMS signatures made with the old certificate stop verifying.
+- Replacing the EEC key pair requires replacing `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` and requesting a new certificate from the DeepSeek-Chat-Enhanced repository; CMS signatures made with the old certificate stop verifying.
 - Manifest and artifact signatures cover file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere; author artifacts must be LF too.
 - Minifying the artifact is recommended: it shrinks the payload and avoids meaningless whitespace differences.
 
