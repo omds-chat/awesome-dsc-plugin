@@ -2,6 +2,7 @@ node_modules/
 dist/
 temp/
 single-branch/
+packages/
 *.log
 .DS_Store
 .env

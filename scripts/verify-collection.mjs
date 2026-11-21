@@ -21,6 +21,7 @@ import { join } from 'node:path'
 import { readCatalog } from './lib/catalog.mjs'
 import { formatProblems, resolveRootCaPath, verifyCollection } from './lib/collection-verify.mjs'
 import { NPM_REGISTRY_URL, checkNpmPackages } from './lib/npm-package-check.mjs'
+import { resolveNpmRegistryUrl } from './lib/env.mjs'
 import { opensslVersion } from './pki.mjs'
 
 function usage() {
@@ -32,7 +33,7 @@ function usage() {
     '  --root-ca <路径>            根证书路径,用于校验证书链与 CMS 签名',
     '  --allow-placeholder-eec     骨架模式:根证书缺失、certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt 未由根 CA 签发、清单或清单签名缺失时只警告',
     '  --allow-missing-manifest    只放开三层清单与清单签名缺失,结构与哈希检查照常执行',
-    '  --registry <地址>           npm registry 地址,默认 ' + NPM_REGISTRY_URL,
+    '  --registry <地址>           npm registry 地址,默认读环境变量 NPM_REGISTRY_URL(缺省 ' + NPM_REGISTRY_URL + ')',
     '  --skip-npm                  跳过 catalog 副本的 npm 包名在线检查',
     '  --collection-name <名称>    合集名称,默认取合集目录名',
     '  --json                      以 JSON 输出校验结果',
@@ -40,6 +41,7 @@ function usage() {
     '',
     '环境变量:',
     '  ROOT_CA_PATH                根证书路径,等价于 --root-ca',
+    '  NPM_REGISTRY_URL            npm registry 地址,等价于 --registry;离线联调指向 scripts/dev/npm-registry-mock.mjs(见 README「本地校验」)',
     '',
   ].join('\n'))
 }
@@ -50,7 +52,7 @@ function parseArgs(argv) {
     rootCa: null,
     allowPlaceholderEec: false,
     allowMissingManifest: false,
-    registry: NPM_REGISTRY_URL,
+    registry: resolveNpmRegistryUrl(),
     skipNpm: false,
     collectionName: null,
     json: false,

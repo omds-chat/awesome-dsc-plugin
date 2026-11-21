@@ -23,7 +23,7 @@
  *   --certs <目录>     证书目录,默认 certs
  *   --site <目录>      站点设置目录,默认 site
  *   --dir <目录>       pages 包目录,默认 dist/pages
- *   --registry <地址>  npm registry 地址
+ *   --registry <地址>  npm registry 地址,默认读环境变量 NPM_REGISTRY_URL(缺省官方源)
  *   --skip-npm         跳过 npm 包名在线检查
  *   --comment <路径>   同时把报告写成 PR 评论 Markdown(工作流用)
  *   --json             以 JSON 输出汇总
@@ -36,6 +36,7 @@ import { checkAuthorNames, checkCerts, checkPresetTags, checkRemoved, checkPlugi
 import { readCollectionMeta } from './lib/collection-meta.mjs'
 import { verifyCollection } from './lib/collection-verify.mjs'
 import { NPM_REGISTRY_URL, checkNpmPackages } from './lib/npm-package-check.mjs'
+import { resolveNpmRegistryUrl } from './lib/env.mjs'
 import { PLUGIN_NETWORK_SELFTALK } from './lib/plugin-network-scan.mjs'
 import { formatPreflightComment, PREFLIGHT_COMMENT_MARKER } from './lib/preflight-comment.mjs'
 
@@ -58,11 +59,14 @@ function usage() {
     '  --certs <目录>     证书目录,默认 certs',
     '  --site <目录>      站点设置目录,默认 site',
     '  --dir <目录>       pages 包目录,默认 dist/pages',
-    '  --registry <地址>  npm registry 地址,默认 ' + NPM_REGISTRY_URL,
+    '  --registry <地址>  npm registry 地址,默认读环境变量 NPM_REGISTRY_URL(缺省 ' + NPM_REGISTRY_URL + ')',
     '  --skip-npm         跳过 npm 包名在线检查',
     '  --comment <路径>   同时把报告写成 PR 评论 Markdown,固定标记见 lib/preflight-comment.mjs',
     '  --json             以 JSON 输出汇总',
     '  --help             显示本说明',
+    '',
+    '环境变量:',
+    '  NPM_REGISTRY_URL   npm registry 地址,等价于 --registry;离线联调指向 scripts/dev/npm-registry-mock.mjs(见 README「本地校验」)',
     '',
   ].join('\n'))
 }
@@ -73,7 +77,7 @@ function parseArgs(argv) {
     certs: 'certs',
     site: 'site',
     dir: join('dist', 'pages'),
-    registry: NPM_REGISTRY_URL,
+    registry: resolveNpmRegistryUrl(),
     skipNpm: false,
     comment: null,
     json: false,

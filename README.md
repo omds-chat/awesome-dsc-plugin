@@ -495,6 +495,42 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 - 单独跑某一步:`pnpm verify:consistency` 交叉校验 `dist/pages` 的收录信息;`node scripts/report-build-anomalies.mjs --dry-run` 只打印上报请求体,不发真实请求,补报时去掉 `--dry-run` 并设置 `GITHUB_TOKEN`。
 - 本地需要 OpenSSL 3.0 及以上,脚本只调用 `openssl` 命令行,不实现任何密码学运算。
 
+### 离线联调 npm 校验
+
+`scripts/dev/npm-registry-mock.mjs` 是本地 npm registry 模拟器:零依赖 Node http 服务,只模拟包的发布登记(PUT)与元数据查询(GET),不实现 tarball,也不实现 npm 生态的认证。它是联调用具,不是 registry 实现;数据存仓库根 `packages/` 目录(`.gitignore` 已排除)。端口默认 61123(61117-61122 已被其他联调服务占用),`--port` 可调,只监听本地回环 `127.0.0.1`。
+
+`verify-catalog`、`verify-collection`、`preflight` 的 `--registry` 默认值按「命令行 `--registry` → 环境变量 `NPM_REGISTRY_URL`(含仓库根 `.env`)→ 官方源」取值。`.env` 模板见 `.env.example`,登记 `NPM_REGISTRY_URL=http://127.0.0.1:61123/` 后校验的在线查询走本地回环,不触外网;留空或删除该条则回落官方源。
+
+收录时序两种场景的预期结果:
+
+| 场景 | 操作顺序 | 预期结果 |
+|:---:|:---:|:---:|
+| 先收录后发布 | 先在 `catalog/` 登记 dsc-xxx,跑校验,再向模拟器发布 dsc-xxx | 发布前校验报 `NPM_PACKAGE_NOT_FOUND` 错误、不收录;发布后同一命令看到「包存在且一致」,校验通过 |
+| 先发布后收录 | 先向模拟器发布 dsc-xxx,再登记 `catalog/` 并跑校验 | 校验直接通过;`DELETE` 下架后同一命令报 `NPM_PACKAGE_NOT_FOUND`——「曾发布后下架」与从未发布同判,一律不收录 |
+
+完整流程(模拟器与校验都在本机,全部请求走 `127.0.0.1`,不触外网):
+
+```bash
+# 1. 起模拟器(前台运行,Ctrl+C 停止)
+node scripts/dev/npm-registry-mock.mjs
+
+# 2. 发布两个模拟包(shasum 缺省时由模拟器按包名与版本计算)
+curl -X PUT http://127.0.0.1:61123/dsc-demo-alpha -d '{"version":"1.0.0"}'
+curl -X PUT http://127.0.0.1:61123/dsc-demo-beta -d '{"version":"0.1.0"}'
+
+# 3. 跑仓库级校验:登记包存在且与插件名一致,catalog 校验通过
+node scripts/verify-catalog.mjs --registry http://127.0.0.1:61123/
+
+# 4. 模拟下架一个包,再跑校验:该包报 NPM_PACKAGE_NOT_FOUND
+curl -X DELETE http://127.0.0.1:61123/dsc-demo-alpha/1.0.0
+node scripts/verify-catalog.mjs --registry http://127.0.0.1:61123/
+
+# 5. 不改 .env 时,用环境变量覆盖官方源(与 --registry 等价)
+NPM_REGISTRY_URL=http://127.0.0.1:61123/ node scripts/verify-catalog.mjs
+```
+
+不联网且不起模拟器时,校验对「registry 不可达」降级为「跳过在线检查」警告(NPM_CHECK_OFFLINE),不把网络故障当登记错误;CI 联网时查不到包按错误拦截。
+
 ## 安全提示
 
 - 签名不通过时插件市场会警告用户并建议重新下载,不会静默运行。

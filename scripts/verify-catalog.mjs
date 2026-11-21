@@ -23,6 +23,7 @@ import { join, resolve } from 'node:path'
 import { formatProblems } from './lib/collection-verify.mjs'
 import { readCatalog } from './lib/catalog.mjs'
 import { NPM_REGISTRY_URL, checkNpmPackages } from './lib/npm-package-check.mjs'
+import { resolveNpmRegistryUrl } from './lib/env.mjs'
 import {
   checkAuthorNames,
   checkCerts,
@@ -42,13 +43,14 @@ function usage() {
     '  --certs <目录>     证书目录,默认 certs',
     '  --tags <文件>      预设标签来源,默认 site/tags.json',
     '  --root-ca <路径>   根证书路径,给出时校验合集证书的签发链',
-    '  --registry <地址>  npm registry 地址,默认 ' + NPM_REGISTRY_URL,
+    '  --registry <地址>  npm registry 地址,默认读环境变量 NPM_REGISTRY_URL(缺省 ' + NPM_REGISTRY_URL + ')',
     '  --skip-npm         跳过 npm 包名在线检查(本地无网时可不跳,检查会自行降级为警告)',
     '  --json             以 JSON 输出校验结果',
     '  --help             显示本说明',
     '',
     '环境变量:',
     '  ROOT_CA_PATH       根证书路径,等价于 --root-ca',
+    '  NPM_REGISTRY_URL   npm registry 地址,等价于 --registry;离线联调指向 scripts/dev/npm-registry-mock.mjs(见 README「本地校验」)',
     '',
   ].join('\n'))
 }
@@ -59,7 +61,7 @@ function parseArgs(argv) {
     certs: 'certs',
     tags: join('site', 'tags.json'),
     rootCa: null,
-    registry: NPM_REGISTRY_URL,
+    registry: resolveNpmRegistryUrl(),
     skipNpm: false,
     json: false,
     help: false,
