@@ -67,6 +67,8 @@ CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范
 | `repo_link` | string | 源码仓库链接 |
 | `dependencies` | object | 仅允许 `dsc` 一个键,值为 semver range |
 
+挂载点 `mounts` 不在 `meta.json` 里:它是插件导出清单(manifest)的字段,值为挂载点名字数组、不得重复,当前只有 `session:changed`;本仓库只分发产物,不读取也不校验该字段。
+
 校验脚本强制 `name` 与 `version` 分别与 `plugins.json`、目录名一致;其余字段由分发规范 v2 要求,市场展示插件时读取。
 
 ## 清单
