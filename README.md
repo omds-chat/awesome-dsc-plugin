@@ -487,7 +487,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
   ```
 
 - 单独跑某一步:`pnpm verify:consistency` 交叉校验 `dist/pages` 的收录信息;`node scripts/report-build-anomalies.mjs --dry-run` 只打印上报请求体,不发真实请求,补报时去掉 `--dry-run` 并设置 `GITHUB_TOKEN`。
-- 本机需要 OpenSSL 3.0 及以上,脚本只调用 `openssl` 命令行,不实现任何密码学运算。
+- 本地需要 OpenSSL 3.0 及以上,脚本只调用 `openssl` 命令行,不实现任何密码学运算。
 
 ## 安全提示
 
