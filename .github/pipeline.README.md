@@ -11,7 +11,7 @@
 
 仓库根不再存放 `plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/`:它们是 pages 包的构建产物,只在构建出的 pages 包里出现,也不再有「空基线」。因此仓库级校验只看 `catalog/` 与 `certs/`(`pnpm verify:catalog`),pages 包的校验用 `pnpm verify:bundle`。
 
-`ci-memory` 是与之并列的孤立并行分支,存三层清单的上一版;它的本地工作区放在 `single-branch/ci-memory/`,自带 `.git`,主仓库 `.gitignore` 已忽略该目录,分支内容不进 `main`。
+`ci-memory` 是与之并列的孤立并行分支,存三层清单的上一版;流水线把它检出到 `single-branch/ci-memory/`,本地工作区也用同一路径,该目录自带 `.git`,主仓库 `.gitignore` 已忽略它,分支内容不进 `main`。
 
 ## 二、证书位置
 
@@ -72,9 +72,18 @@ pages 不做版本留存,每个 Release 全量重建并直接替换,源码树里
 写回失败即中止本次发布,CI 报错,不沿用旧 `revision` 继续发布。写入与读取都只有流水线,人工不改分支内容;
 分支缺失时流水线报错中止,不代为创建。
 
-L1 的 revision 当前从已发布站点的 `manifest.json` 读取上一次的值:L2、L3 同理由 `plugins/<作者>/manifest.json`、
-`plugins/<作者>/<插件>/manifest.json` 读取。该层文件集合与哈希都没变时沿用旧值,有变化时加一,取不到时从 1 开始。
-读回来源将由已发布站点改为 `ci-memory` 分支的 `layer-manifests/`,属下一步实现;实现之前读回仍以线上站点为准。
+读回的来源优先级由高到低,每条路径都按分发目录镜像:
+
+| 优先级 | 来源 | 读法 | 取不到时 |
+|:---:|:---:|:---:|:---:|
+| 1 | `ci-memory` 分支 | 按层读 `layer-manifests/<分发路径>/manifest.json`,L1 即 `layer-manifests/manifest.json` | 落到第 2 级 |
+| 2 | 已发布站点 | 按层读 `<已发布基址>/<分发路径>/manifest.json`,过渡回退 | 落到第 3 级 |
+| 3 | 没有旧清单 | 该层 `revision` 从 1 开始 | 记一条警告 |
+
+L1、L2、L3 各自独立按上表读回:该层文件集合与哈希都没变时沿用旧值,有变化时加一,任何一层读不到都不影响其余层。
+分支优先已实现,线上读回只是过渡回退——写回成功后,下一次构建的每一层都能在分支上找到上一版,不再走第 2 级。
+读回由 `scripts/lib/ci-memory.mjs` 的 `readCiMemoryManifests` 完成,写回由 `scripts/write-ci-memory.mjs` 完成,两者都不读也不写任何分发内容。
+`ci-memory` 工作区不存在或不是 git 工作区一律按「分支缺失」处理:构建在拉取插件之前就报错中止,不代为创建分支。
 
 ## 六、本地复现
 
@@ -87,9 +96,12 @@ pnpm type
 pnpm build:site
 
 # 组装 pages 包:需要 EEC_SECRET_KEY 与 ROOT_CA_PATH
+# --ci-memory 指向 ci-memory 分支的本地工作区,构建从这里读回上一版 revision(分支优先)
+# --published-base 是过渡回退:只有分支里读不到该层清单时才会读线上
 EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
   node scripts/build-from-catalog.mjs \
   --catalog catalog --certs certs --site site/dist --out dist/pages \
+  --ci-memory single-branch/ci-memory \
   --published-base https://omds-chat.github.io/awesome-dsc-plugin/
 
 # pages 包校验:三层清单、清单签名、产物签名、产物网络扫描与收录信息交叉一致性
@@ -99,11 +111,27 @@ pnpm verify:bundle --root-ca root_ca.crt
 openssl cms -verify -binary -md sha512 -inform DER \
   -in dist/pages/manifest.json.sig -content dist/pages/manifest.json \
   -CAfile root_ca.crt -certfile dist/pages/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt
+
+# 全部校验通过之后才写回:把三层清单与签名镜像到 ci-memory 工作区(只做文件,不提交)
+node scripts/write-ci-memory.mjs --bundle dist/pages --ci-memory single-branch/ci-memory
 ```
 
-流水线步骤依次为:安装依赖、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中即剔除该插件)、用 EEC 重新签名 `plugin.js`、生成并签名三层清单、
-组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、上报剔除项、上传并部署。
-清单写回 `ci-memory` 分支排在独立验签之后、上传并部署之前,写回失败即中止发布;这一步以及构建开始前从该分支读回 `revision`,都属下一步实现,当前读回仍以线上站点为准。
+流水线步骤依次为:安装依赖、检出 `main` 与 `ci-memory` 两条分支、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中即剔除该插件)、用 EEC 重新签名 `plugin.js`、按层读回上一版并生成与签名三层清单、
+组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、写回 `ci-memory` 并推送、上报剔除项、上传并部署。
+
+写回由 `scripts/write-ci-memory.mjs` 做文件镜像、由流水线用 `git` 提交并推送,命令与本地复现一致:
+
+```bash
+node scripts/write-ci-memory.mjs --bundle dist/pages --ci-memory single-branch/ci-memory
+git -C single-branch/ci-memory add -A
+git -C single-branch/ci-memory commit -m "chore(ci-memory): layer manifests for <tag>"
+git -C single-branch/ci-memory push origin HEAD:ci-memory
+```
+
+写回排在全部校验通过之后、上传与部署之前:镜像、提交、推送任一步失败都会以非零退出码结束,部署作业依赖构建作业,本次发布因此中止,
+不会带着旧 `revision` 继续发布;清单与分支现有内容一致时不产生提交,也不推送。
+`ci-memory` 工作区由 `actions/checkout` 按 `ref: ci-memory` 检出,分支缺失时该步骤直接失败,不代为创建;
+工作流权限因此从 `contents: read` 改为 `contents: write`,`pages` 与 `issues` 的权限不变。
 
 ## 七、异常插件与上报
 

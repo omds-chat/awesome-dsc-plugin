@@ -80,14 +80,14 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 - `path` 相对清单所在目录,使用正斜杠,不得是绝对路径,不得出现 `.` 或 `..` 段,不得指向清单自身,不得重复。
 - 哈希算法 SHA-512,十六进制小写,固定 128 位。
-- `revision` 是每层独立的正整数:该层文件集合或内容变化时加一,不变时沿用旧值;pages 包每次全量重建,上一份值按层从已发布站点的同名 `manifest.json` 读取,取不到时从 1 开始。三层清单在发布前写回 `ci-memory` 分支的 `layer-manifests/`,路径与分发目录一一镜像,清单与同名 `.sig` 成对保存;写回失败即中止本次发布,CI 报错,不沿用旧 `revision` 继续发布。读回来源将由已发布站点改为 `ci-memory`,属下一步实现。
+- `revision` 是每层独立的正整数:该层文件集合或内容变化时加一,不变时沿用旧值;pages 包每次全量重建,上一份值按层从 `ci-memory` 分支的 `layer-manifests/` 读回,分支里读不到该层时才回退到已发布站点的同名 `manifest.json`,仍取不到则从 1 开始。三层清单在发布前写回该分支的同一位置,路径与分发目录一一镜像,清单与同名 `.sig` 成对保存;写回失败即中止本次发布,CI 报错,不沿用旧 `revision` 继续发布。读回以分支为准,线上读回只是过渡回退;分支缺失时流水线报错中止,不代为创建。
 - L3 不覆盖 `plugin.js` 与 `plugin.js.sig`:产物本体由每个版本的 `plugin.js.sig` 独立签名,清单只描述元数据。
 - `tags.json` 可选:存在就必须被 L1 清单覆盖,不存在则不报错、也不进清单。
 - `meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`,`plugin.js.author.sig` 可选保留。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖。若作者沿用 `dsc-plugin-template` 的产物,该模板会一并产出 `meta.json.author.sig`,本仓库不收录这个文件。
 
 三层之间不做收束:L1 不引用 L2,L2 不引用 L3,任何一层都可以单独发布、单独校验、单独重签。取舍是放弃「一次校验拿到全树摘要」,换取按插件增量更新:改一个插件只需 L3 的 `revision` 加一,L2 与 L1 的 `revision` 不变,客户端也只重新拉取这一层的清单与签名。若把三层收束成一份根清单,任何插件发版都会改动根清单,所有客户端都得重拉整份摘要。
 
-pages 包是构建产物,不提交回仓库:每次 Release 全量重建并整体替换,仓库里不保留 `plugins.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig`,也不放空基线来喂仓库级校验。因此每层的 `revision` 不能在源码树里沿用,改由 `ci-memory` 分支承载上一版:本次清单在发布前写回该分支的 `layer-manifests/`,下一次构建按层从中读回,文件集合与哈希都没变时沿用旧值,有变化时加一。读回来源当前仍是已发布站点的同名 `manifest.json`,改为 `ci-memory` 属下一步实现。
+pages 包是构建产物,不提交回仓库:每次 Release 全量重建并整体替换,仓库里不保留 `plugins.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig`,也不放空基线来喂仓库级校验。因此每层的 `revision` 不能在源码树里沿用,改由 `ci-memory` 分支承载上一版:本次清单在发布前写回该分支的 `layer-manifests/`,下一次构建按层从中读回,文件集合与哈希都没变时沿用旧值,有变化时加一。读回来源是 `ci-memory` 分支,优先于已发布站点;线上读回只是过渡回退,分支缺失时报错中止,不代为创建。
 
 ## 必需文件
 
@@ -385,7 +385,7 @@ awesome-dsc-plugin/
 2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。拉取到的 `plugin.js` 先做网络自建静态扫描,命中的插件剔除本次发布。作者签名取不到或为空按没有签名处理,只记警告,不影响该插件收录。
 3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,插件目录索引 `plugins.json` 由 catalog 生成,`catalog/`(含 `removed.json`,本次剔除的作者与插件不在其中)与 `certs/` 复制进来,再在 `catalog/` 下写入 `index.json` 与 `anomalies.json`,并按层生成、签名 L1、L2、L3 三层清单。
 4. 交叉校验:`scripts/verify-catalog-consistency.mjs` 比对 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止并列出差异。
-5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,全部通过后整体替换已发布站点,不做版本留存。
+5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,全部通过后把新清单与签名写回 `ci-memory` 分支并推送,最后整体替换已发布站点,不做版本留存。写回失败即中止本次发布。
 
 构建把两类问题分开处理,边界写在 `scripts/build-from-catalog.mjs` 的实现与 [catalog/README.md](catalog/README.md) 里:
 
@@ -472,7 +472,17 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
   EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
     node scripts/build-from-catalog.mjs \
     --catalog catalog --certs certs --site site/dist --out dist/pages \
+    --ci-memory single-branch/ci-memory \
     --published-base https://omds-chat.github.io/awesome-dsc-plugin/
+  ```
+
+- 写回单独成步,只做文件镜像,提交与推送由流水线用 git 完成:
+
+  ```bash
+  node scripts/write-ci-memory.mjs --bundle dist/pages --ci-memory single-branch/ci-memory
+  git -C single-branch/ci-memory add -A
+  git -C single-branch/ci-memory commit -m "chore(ci-memory): layer manifests for <tag>"
+  git -C single-branch/ci-memory push origin HEAD:ci-memory
   ```
 
 - 单独跑某一步:`pnpm verify:consistency` 交叉校验 `dist/pages` 的收录信息;`node scripts/report-build-anomalies.mjs --dry-run` 只打印上报请求体,不发真实请求,补报时去掉 `--dry-run` 并设置 `GITHUB_TOKEN`。

@@ -1,7 +1,8 @@
 name: build-and-deploy
 
 # 分发模型:来源只有插件作者自己的 Pages 站点,每个 Release 全量重建 pages 包并直接替换,不做版本留存。
-# 本流程不再把分发包提交回仓库,因此只需要读源码的权限;额外的 issues 写权限只用于异常上报。
+# 本流程不把分发包提交回仓库,但要把三层清单写回 ci-memory 分支承载下一次的 revision,
+# 因此源码需要 contents: write;issues: write 只用于异常上报。
 on:
   release:
     types:
@@ -9,7 +10,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # 写回 ci-memory 分支的清单需要推送到本仓库的另一条分支
+  contents: write
   pages: write
   id-token: write
   # 异常上报要写 Issue:构建剔除的插件会追加到追踪 Issue,失败不影响发布
@@ -31,6 +33,8 @@ env:
   ROOT_CA_URL: ${{ vars.ROOT_CA_URL }}
   SITE_DIR: ${{ vars.SITE_DIR }}
   PUBLISHED_BASE_URL: ${{ vars.PUBLISHED_BASE_URL }}
+  # ci-memory 分支的本地工作区,与本地复现同路径;构建前读回清单,校验通过后写回
+  CI_MEMORY_DIR: ${{ github.workspace }}/single-branch/ci-memory
 
 jobs:
   build:
@@ -40,6 +44,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # ci-memory 是与 main 无公共祖先的孤立并行分支,单独检出到 single-branch/ci-memory(与本地工作区同路径)。
+      # 构建前从这里读回上一版清单,校验通过后把新清单与签名写回并推送。
+      # 分支缺失时本步骤直接失败,本次发布中止;流水线不代为创建分支。
+      - name: Checkout ci-memory
+        uses: actions/checkout@v4
+        with:
+          ref: ci-memory
+          path: single-branch/ci-memory
+          persist-credentials: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -120,7 +134,8 @@ jobs:
           echo "SITE_OUT=$site_dir" >> "$GITHUB_ENV"
 
       # 按 catalog 从各插件的 base_url 拉取版本,重新签名 plugin.js,生成三层清单并组装 pages 包。
-      # pages 根目录的 L1 revision 从已发布站点的 manifest.json 读取上一次的值再加一,取不到时从 1 开始。
+      # 三层清单的上一版按层从 ci-memory 分支的 layer-manifests/ 读回,分支优先;
+      # 分支里没有该层时才回退到已发布站点的同名 manifest.json,仍取不到时该层 revision 从 1 开始。
       - name: Pull plugins and assemble pages
         run: |
           set -euo pipefail
@@ -131,6 +146,7 @@ jobs:
             --site "$SITE_OUT" \
             --out dist/pages \
             --root-ca "$ROOT_CA_PATH" \
+            --ci-memory "$CI_MEMORY_DIR" \
             --published-base "$published" \
             --release-tag "${GITHUB_REF_NAME:-unknown}"
 
@@ -222,6 +238,24 @@ jobs:
           done
           echo "pages 结构检查通过"
 
+      # 写回:把新生成的三层清单与同名 .sig 按分发路径镜像进 ci-memory 工作区,提交并推送。
+      # 位置在全部校验通过之后、上传与部署之前;任一步非零退出都会中止本次发布
+      # (部署作业 needs: build),不沿用旧 revision 继续发布。内容与分支一致时不提交也不推送。
+      - name: Write manifests back to ci-memory
+        run: |
+          set -euo pipefail
+          node scripts/write-ci-memory.mjs --bundle dist/pages --ci-memory "$CI_MEMORY_DIR"
+          git -C "$CI_MEMORY_DIR" add -A
+          if git -C "$CI_MEMORY_DIR" diff --cached --quiet; then
+            echo "清单与 ci-memory 分支现有内容一致,不产生提交"
+            exit 0
+          fi
+          git -C "$CI_MEMORY_DIR" \
+            -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "chore(ci-memory): layer manifests for ${GITHUB_REF_NAME:-unknown}"
+          git -C "$CI_MEMORY_DIR" push origin "HEAD:ci-memory"
+
       # 异常上报:只写本仓库 Issue,不进发布产物。
       # 脚本自己吞掉全部失败并以 0 退出,再加一道 continue-on-error,确保上报问题不阻塞发布。
       - name: Report excluded plugins
@@ -248,6 +282,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # 写回只需要构建作业:部署作业按最小权限收回到 contents: read
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

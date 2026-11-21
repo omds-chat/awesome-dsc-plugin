@@ -7,7 +7,8 @@
  * 保证两条路径产出的清单语义完全一致。
  *
  * revision 语义:该层文件集合与哈希都没变时沿用旧 revision,有变化时加一,没有旧清单时从 1 开始。
- * 旧清单可以由调用方注入(build-from-catalog 从已发布站点读),没有注入时读该层目录内的 manifest.json。
+ * 旧清单可以由调用方注入(build-from-catalog 从 ci-memory 分支的 layer-manifests/ 读),
+ * 没有注入时读该层目录内的 manifest.json。
  */
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'

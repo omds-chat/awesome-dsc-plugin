@@ -80,14 +80,14 @@ Manifest format, with the JSON Schema in `schemas/manifest.schema.json`:
 
 - `path` is relative to the directory holding the manifest, uses forward slashes, may not be absolute, may not contain a `.` or `..` segment, may not point at the manifest itself, and may not repeat.
 - The hash is SHA-512 in lowercase hex, always 128 characters.
-- `revision` is a positive integer per layer: it increments when the layer's file set or contents change and keeps its value when nothing changed; the bundle is rebuilt from scratch on every Release, so the previous value is read per layer from the published site's `manifest.json` at the same path, starting at 1 when it cannot be read. Before publishing, the three layer manifests are written back to `layer-manifests/` on the `ci-memory` branch, mirroring the distribution paths one to one and keeping each manifest paired with its `.sig`; a failed write-back aborts the release, CI reports the error, and the old `revision` is not carried forward into a publish. The read-back source will move from the published site to `ci-memory`; that change is a next step.
+- `revision` is a positive integer per layer: it increments when the layer's file set or contents change and keeps its value when nothing changed; the bundle is rebuilt from scratch on every Release, so the previous value is read per layer from `layer-manifests/` on the `ci-memory` branch, falling back to the published site's `manifest.json` at the same path only when the branch has no manifest for that layer, and starting at 1 when neither exists. Before publishing, the three layer manifests are written back to the same location on that branch, mirroring the distribution paths one to one and keeping each manifest paired with its `.sig`; a failed write-back aborts the release, CI reports the error, and the old `revision` is not carried forward into a publish. The branch is the source of truth for read-back and the site read-back is only a transitional fallback; a missing branch fails the pipeline instead of being created.
 - L3 does not cover `plugin.js` or `plugin.js.sig`: the artifact itself is signed per version by `plugin.js.sig` and the manifest describes metadata only.
 - `tags.json` is optional: when it exists it must be covered by the L1 manifest, and when it does not exist it is neither required nor listed.
 - `meta.json.sig` and `meta.json.author.sig` are gone: the only collection signature inside a version directory is `plugin.js.sig`, and `plugin.js.author.sig` stays optional. `meta.json` is covered by the L3 manifest and bound by the collection EEC, while the author public key itself is covered by L2. When an author keeps the output of `dsc-plugin-template`, that template also emits `meta.json.author.sig`; this repository does not carry the file.
 
 The three layers are deliberately not folded together: L1 does not reference L2 and L2 does not reference L3, so each layer can be published, verified and re-signed on its own. The trade-off gives up "one check yields a digest of the whole tree" in exchange for per-plugin incremental updates: changing one plugin only increments the L3 `revision`, leaves L2 and L1 untouched, and clients refetch just that layer. Folding the layers into a single root manifest would make every plugin release rewrite the root manifest and force every client to refetch the whole digest.
 
-The pages bundle is a build artifact and is never committed back: every Release rebuilds it and replaces it wholesale, so the repository keeps no history of `plugins.json`, the plugin data under `plugins/`, `manifest.json` or `manifest.json.sig`, and no empty baselines stand in for them. Each layer's `revision` therefore cannot be carried over from the source tree; the previous version lives on the `ci-memory` branch instead: the manifests are written back to `layer-manifests/` before publishing, and the next build reads each layer back from there, keeping the value when the file set and hashes are unchanged and incrementing it otherwise. The read-back source is still the published site's `manifest.json`; switching it to `ci-memory` is a next step.
+The pages bundle is a build artifact and is never committed back: every Release rebuilds it and replaces it wholesale, so the repository keeps no history of `plugins.json`, the plugin data under `plugins/`, `manifest.json` or `manifest.json.sig`, and no empty baselines stand in for them. Each layer's `revision` therefore cannot be carried over from the source tree; the previous version lives on the `ci-memory` branch instead: the manifests are written back to `layer-manifests/` before publishing, and the next build reads each layer back from there, keeping the value when the file set and hashes are unchanged and incrementing it otherwise. The read-back source is the `ci-memory` branch, which takes precedence over the published site; the site read-back is only a transitional fallback, and a missing branch fails the pipeline rather than being created.
 
 ## Required files
 
@@ -385,7 +385,7 @@ This collection does not enable download counting.
 2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC. Each fetched `plugin.js` first goes through the self-built-network scan, and a hit excludes that plugin from the release. An author signature that cannot be fetched or is empty is treated as absent: it only logs a warning and never excludes the plugin.
 3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from `site/`, the plugin index `plugins.json` is generated from `catalog/`, `catalog/` (with `removed.json`, minus the authors and plugins excluded from this release) and `certs/` are copied over, `catalog/index.json` and `catalog/anomalies.json` are then written, and the L1, L2 and L3 manifests are generated and signed layer by layer.
 4. It cross-checks the result: `scripts/verify-catalog-consistency.mjs` compares `catalog/index.json`, `plugins.json`, `plugins/author_manifest.json`, the `catalog/` copy and the `plugins/` tree, and aborts with a non-zero exit code listing every difference.
-5. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes replaces the published site wholesale, keeping no versions.
+5. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes writes the new manifests and signatures back to the `ci-memory` branch and pushes them before replacing the published site wholesale, keeping no versions. A failed write-back aborts the release.
 
 The build separates two kinds of problem; the boundary is implemented in `scripts/build-from-catalog.mjs` and documented in [catalog/README.md](catalog/README.md):
 
@@ -472,7 +472,17 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages bundle check
   EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
     node scripts/build-from-catalog.mjs \
     --catalog catalog --certs certs --site site/dist --out dist/pages \
+    --ci-memory single-branch/ci-memory \
     --published-base https://omds-chat.github.io/awesome-dsc-plugin/
+  ```
+
+- The write-back is a separate step that only mirrors files; the pipeline commits and pushes with git:
+
+  ```bash
+  node scripts/write-ci-memory.mjs --bundle dist/pages --ci-memory single-branch/ci-memory
+  git -C single-branch/ci-memory add -A
+  git -C single-branch/ci-memory commit -m "chore(ci-memory): layer manifests for <tag>"
+  git -C single-branch/ci-memory push origin HEAD:ci-memory
   ```
 
 - Single steps remain available: `pnpm verify:consistency` cross-checks the collected information in `dist/pages`; `node scripts/report-build-anomalies.mjs --dry-run` prints the reporting request body without sending anything, and a real re-report only needs `GITHUB_TOKEN` without `--dry-run`.

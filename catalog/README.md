@@ -126,7 +126,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 4. 把公钥、版本列表、各版本元数据写入 pages 包的 `plugins/` 目录,把 `catalog` 与 `certs` 复制进 pages,再生成 L1、L2、L3 三层清单与清单签名。
 5. 生成 pages 包 `catalog/` 下的两份汇总文件:`index.json`(作者列表与插件列表,含当前版本、标签与版本数)与 `anomalies.json`(本次发布被剔除的插件)。
 6. 用 `scripts/verify-catalog-consistency.mjs` 交叉校验 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止。
-7. 每次 Release 全量重建 pages 并直接替换,不做版本留存;三层清单在发布前写回 `ci-memory` 分支的 `layer-manifests/`,写回失败即中止发布;L1 的 `revision` 当前从已发布站点的 `manifest.json` 读上一次的值加一,取不到时从 1 开始,读回来源改为 `ci-memory` 属下一步实现。
+7. 每次 Release 全量重建 pages 并直接替换,不做版本留存;三层清单在发布前写回 `ci-memory` 分支的 `layer-manifests/`,写回失败即中止发布;`revision` 按层从该分支读回上一次的值,分支里没有该层时才回退到已发布站点,仍取不到时从 1 开始。
 8. `catalog` 与 `certs` 随 pages 分发,但不进任何一层清单,它们是登记信息与信任材料。
 
 ### catalog/index.json 的边界

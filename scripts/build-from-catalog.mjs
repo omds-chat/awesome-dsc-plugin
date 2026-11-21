@@ -43,9 +43,18 @@
  * 所有产出先落在临时目录,全部校验通过后才替换 --out,因此不会留下半成品。
  * pages 根目录不放 eec.pem,合集证书只在 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt。
  *
+ * revision 的上一份值按层读回,来源优先级由高到低:
+ *   ci-memory 分支工作区的 layer-manifests/(正式来源,路径与分发目录一一镜像);
+ *   已发布站点的同名 manifest.json(过渡回退,分支里读不到该层时才用);
+ *   都取不到时该层没有旧清单,revision 从 1 开始。
+ * ci-memory 工作区缺失即分支缺失,构建报错中止,不代为创建。
+ *
+ * 本脚本只读 ci-memory,写回由 scripts/write-ci-memory.mjs 在校验通过后完成。
+ *
  * 用法:
  *   EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt node scripts/build-from-catalog.mjs \
  *     --catalog catalog --certs certs --site site/dist --out dist/pages \
+ *     --ci-memory single-branch/ci-memory \
  *     --published-base https://omds-chat.github.io/awesome-dsc-plugin/
  */
 import {
@@ -75,6 +84,7 @@ import {
   verifyChain,
 } from './pki.mjs'
 import { fetchVersion, fetchVersions, readCatalog } from './lib/catalog.mjs'
+import { describeLayerRel, readCiMemoryManifests, requireCiMemoryRoot } from './lib/ci-memory.mjs'
 
 /** site 产物里不允许出现的顶层名字:这些位置由本脚本独占,冲突会让人分不清来源 */
 const RESERVED_TOP_LEVEL = [
@@ -115,7 +125,8 @@ function usage() {
     '  --meta <文件>             合集元数据来源,默认 site/meta.json',
     '  --tags <文件>             预设标签来源,默认 site/tags.json',
     '  --release-tag <tag>       本次发布的 tag,写入 catalog/index.json 与 catalog/anomalies.json',
-    '  --published-base <地址>   已发布站点基址,用于读取上一次的清单 revision;取不到时从 1 开始',
+    '  --ci-memory <目录>        ci-memory 分支的本地工作区,用于读回上一次的清单 revision(优先);缺该目录即中止',
+    '  --published-base <地址>   已发布站点基址,过渡回退:分支里读不到该层清单时才读线上;仍取不到时从 1 开始',
     '  --root-ca <路径>          根证书路径,给出时对分发包做证书链与签名自检',
     '  --collection-name <名称>  合集名称,默认取 package.json 的 name',
     '  --timeout <毫秒>          单次 HTTP 请求超时,默认 30000',
@@ -124,6 +135,7 @@ function usage() {
     '环境变量:',
     '  EEC_SECRET_KEY            终端签名私钥,PEM 文本或文件路径;必需',
     '  ROOT_CA_PATH              根证书路径,等价于 --root-ca',
+    '  CI_MEMORY_DIR             ci-memory 分支工作区路径,等价于 --ci-memory',
     '  PUBLISHED_BASE            已发布站点基址,等价于 --published-base',
     '  GITHUB_REF_NAME           本次发布的 tag,等价于 --release-tag',
     '',
@@ -139,6 +151,7 @@ function parseArgs(argv) {
     meta: join('site', 'meta.json'),
     tags: join('site', 'tags.json'),
     releaseTag: null,
+    ciMemory: null,
     publishedBase: null,
     rootCa: null,
     collectionName: null,
@@ -165,6 +178,7 @@ function parseArgs(argv) {
       case '--meta': options.meta = take(); break
       case '--tags': options.tags = take(); break
       case '--release-tag': options.releaseTag = take(); break
+      case '--ci-memory': options.ciMemory = take(); break
       case '--published-base': options.publishedBase = take(); break
       case '--root-ca': options.rootCa = take(); break
       case '--collection-name': options.collectionName = take(); break
@@ -582,35 +596,112 @@ function checkPresetTags({ catalog, presetTags, problems }) {
   }
 }
 
+/** 把一组层路径拼成便于阅读的清单,超过 5 条时只列前 5 条与总数。 */
+function describeLayers(layerRels) {
+  const names = layerRels.map((layerRel) => describeLayerRel(layerRel))
+  if (names.length <= 5) return names.join('、')
+  return names.slice(0, 5).join('、') + ' 等 ' + names.length + ' 层'
+}
+
 /**
- * 从已发布站点读取三层清单的上一次 revision。
- * 取不到或结构不对时返回 null,该层 revision 从 1 开始,并记一条警告。
+ * 按层读回三层清单的上一次 revision,来源优先级由高到低:
+ *   1. ci-memory 分支工作区的 layer-manifests/,路径与分发目录一一镜像;
+ *   2. 已发布站点的同名 manifest.json,过渡回退,只有分支里读不到该层时才用;
+ *   3. 都取不到时该层没有旧清单,revision 从 1 开始。
+ * ci-memory 工作区缺失或不是 git 工作区不在这里兜底:分支缺失时报错中止,不代为创建。
+ * 任何一层读不到都不影响其余层,单层退回 1 只记警告。
+ * @param {object} context 上下文
+ * @param {string|null} context.ciMemoryRoot ci-memory 工作区,未配置时为 null
+ * @param {string|null} context.publishedBase 已发布站点基址,过渡回退用
+ * @param {string[]} context.layerRels 需要读回的层,合集根为空串
+ * @param {Array<object>} context.problems 问题收集数组
+ * @param {number} context.timeoutMs 单次 HTTP 请求超时
+ * @returns {Promise<{manifests: Map<string, object>, stats: {branch: number, site: number, scratch: number}}>}
  */
-async function loadPreviousManifests({ publishedBase, layerRels, problems, timeoutMs }) {
-  const map = new Map()
-  if (!publishedBase) {
-    problems.push(problem('warning', 'PUBLISHED_BASE_MISSING', '未提供已发布站点基址,三层清单的 revision 都从 1 开始', null))
-    return map
+async function loadPreviousManifests({ ciMemoryRoot, publishedBase, layerRels, problems, timeoutMs }) {
+  const manifests = new Map()
+  const stats = { branch: 0, site: 0, scratch: 0 }
+  let pending = [...layerRels]
+
+  if (ciMemoryRoot) {
+    const branch = readCiMemoryManifests({ branchRoot: ciMemoryRoot, layerRels, problems })
+    for (const [layerRel, data] of branch.manifests) manifests.set(layerRel, data)
+    stats.branch = manifests.size
+    pending = layerRels.filter((layerRel) => !manifests.has(layerRel))
+    if (!branch.mirrorExists) {
+      problems.push(
+        problem(
+          'warning',
+          'CI_MEMORY_EMPTY',
+          'ci-memory 分支还没有 layer-manifests/(首次写回之前):' + describeLayers(pending) + ' 没有分支上的上一版清单',
+          null,
+        ),
+      )
+    } else if (pending.length > 0) {
+      problems.push(
+        problem(
+          'warning',
+          'CI_MEMORY_PREVIOUS_MISSING',
+          'ci-memory 分支缺少 ' + describeLayers(pending) + ' 的上一版清单,这些层按下一优先级回退',
+          null,
+        ),
+      )
+    }
+  } else {
+    problems.push(
+      problem('warning', 'CI_MEMORY_NOT_CONFIGURED', '未指定 ci-memory 工作区(--ci-memory 或 CI_MEMORY_DIR),只能从已发布站点回退读回;正式流水线必须提供', null),
+    )
   }
+
+  if (pending.length === 0) return { manifests, stats }
+  if (!publishedBase) {
+    problems.push(
+      problem('warning', 'PUBLISHED_BASE_MISSING', '未提供已发布站点基址,' + describeLayers(pending) + ' 的 revision 从 1 开始', null),
+    )
+    stats.scratch = pending.length
+    return { manifests, stats }
+  }
+
   const base = publishedBase.replace(/\/+$/, '')
-  await Promise.all(
-    layerRels.map(async (layerRel) => {
+  const readOnline = await Promise.all(
+    pending.map(async (layerRel) => {
       const url = base + '/' + (layerRel ? layerRel + '/' : '') + 'manifest.json'
       try {
         const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
-        if (!response.ok) return
+        if (!response.ok) return null
         const data = await response.json()
-        if (typeof data !== 'object' || data === null || !Array.isArray(data.files)) return
-        map.set(layerRel, data)
+        if (typeof data !== 'object' || data === null || !Array.isArray(data.files)) return null
+        return { layerRel, data }
       } catch {
-        return
+        return null
       }
     }),
   )
-  if (map.size === 0) {
-    problems.push(problem('warning', 'PREVIOUS_MANIFEST_MISSING', '已发布站点没有可用的清单,三层清单的 revision 从 1 开始', null))
+  const fromSite = []
+  for (const item of readOnline) {
+    if (!item) continue
+    manifests.set(item.layerRel, item.data)
+    fromSite.push(item.layerRel)
   }
-  return map
+  stats.site = fromSite.length
+  if (fromSite.length > 0) {
+    problems.push(
+      problem(
+        'warning',
+        'PREVIOUS_FROM_SITE',
+        '以下层没有从 ci-memory 分支读回清单,已从已发布站点回退读取:' + describeLayers(fromSite) + ';这是过渡回退,写回成功后下一版不再走这条路径',
+        null,
+      ),
+    )
+  }
+  const stillMissing = pending.filter((layerRel) => !manifests.has(layerRel))
+  stats.scratch = stillMissing.length
+  if (stillMissing.length > 0) {
+    problems.push(
+      problem('warning', 'PREVIOUS_MANIFEST_MISSING', describeLayers(stillMissing) + ' 没有可用的旧清单,revision 从 1 开始', null),
+    )
+  }
+  return { manifests, stats }
 }
 
 function resolveCollectionName(options) {
@@ -645,11 +736,14 @@ async function main() {
   const siteDir = resolve(options.site)
   const outDir = resolve(options.out)
   const rootCaPath = options.rootCa ? resolve(options.rootCa) : process.env.ROOT_CA_PATH ? resolve(process.env.ROOT_CA_PATH) : null
+  const ciMemoryRoot = options.ciMemory || process.env.CI_MEMORY_DIR || null
   const publishedBase = options.publishedBase || process.env.PUBLISHED_BASE || null
   const releaseTag = options.releaseTag || process.env.GITHUB_REF_NAME || process.env.RELEASE_TAG || null
   const collectionName = resolveCollectionName(options)
 
   if (rootCaPath && !existsSync(rootCaPath)) throw new Error('根证书不存在:' + rootCaPath)
+  // ci-memory 是发布的硬依赖:工作区缺失即分支缺失,在拉取任何插件之前就报错中止,不代为创建
+  if (ciMemoryRoot) requireCiMemoryRoot(ciMemoryRoot)
 
   const problems = []
   inspectSite(siteDir, problems)
@@ -716,6 +810,7 @@ async function main() {
 
     const layers = listLayerDirs(staging)
     const previous = await loadPreviousManifests({
+      ciMemoryRoot,
       publishedBase,
       layerRels: layers.map((layer) => layer.layerRel),
       problems,
@@ -725,7 +820,7 @@ async function main() {
       root: staging,
       signer: { eecCertPath: signer.eecCertPath, eecKeyPath: signer.keyFile.path },
       problems,
-      previousResolver: (layerRel) => previous.get(layerRel) ?? null,
+      previousResolver: (layerRel) => previous.manifests.get(layerRel) ?? null,
     })
 
     const finalErrors = problems.filter((item) => item.level === 'error')
@@ -758,7 +853,8 @@ async function main() {
       '  作者 ' + includedAuthors.length + ' 个,插件 ' + includedPlugins.length + ' 个,版本 ' + versionCount + ' 个\n' +
       '  plugin.js 已用合集 EEC 重新签名 ' + signedCount + ' 份\n' +
       '  catalog 复制 ' + catalogFiles + ' 个文件,certs 复制 ' + certFiles + ' 个文件\n' +
-      '  catalog/' + CATALOG_INDEX_FILE + ' 记录作者 ' + includedAuthors.length + ' 个、插件 ' + includedPlugins.length + ' 个\n',
+      '  catalog/' + CATALOG_INDEX_FILE + ' 记录作者 ' + includedAuthors.length + ' 个、插件 ' + includedPlugins.length + ' 个\n' +
+      '  上一版清单来源:ci-memory 分支 ' + previous.stats.branch + ' 层,已发布站点回退 ' + previous.stats.site + ' 层,首次发布 ' + previous.stats.scratch + ' 层\n',
     )
     for (const item of manifests) {
       process.stdout.write('  ' + item.layer + ' 清单 ' + item.dir + '/manifest.json revision=' + item.revision + ',覆盖 ' + item.files + ' 个文件' + (item.changed ? '(已更新)' : '(未变化)') + '\n')
