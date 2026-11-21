@@ -102,7 +102,7 @@ The required and optional files of each location inside the pages bundle. They e
 | `plugins/<author>/<plugin>/` | `versions.json`, `manifest.json`, `manifest.json.sig` | none |
 | `plugins/<author>/<plugin>/<x.y.z>/` | `meta.json`, `plugin.js`, `plugin.js.sig` | `plugin.js.author.sig` |
 
-Directory naming, the `versions.json` shape and the `meta.json` fields are documented in [.github/bundle-layout.README.md](.github/bundle-layout.README.md). The collection certificate lives only at `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` and the root no longer carries an `eec.pem`; it only proves who signed and is covered by no manifest. The root certificate is not part of distribution content: it is distributed through the online-data branch and pinned by fingerprint inside the web client.
+Directory naming, the `versions.json` shape and the `meta.json` fields are documented in [.github/bundle-layout.README.md](.github/bundle-layout.README.md). The collection certificate lives only at `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` and the root no longer carries an `eec.pem`; it only proves who signed and is covered by no manifest. The root certificate is not part of distribution content: it is distributed through the `certs` branch of DeepSeek-Chat-Enhanced and pinned by fingerprint inside the web client.
 
 ## Signing and verification
 

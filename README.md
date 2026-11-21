@@ -102,7 +102,7 @@ pages 包内各位置的必需与可选文件如下。它们只存在于构建�
 | `plugins/<作者>/<插件>/` | `versions.json`、`manifest.json`、`manifest.json.sig` | 无 |
 | `plugins/<作者>/<插件>/<x.y.z>/` | `meta.json`、`plugin.js`、`plugin.js.sig` | `plugin.js.author.sig` |
 
-目录命名、`versions.json` 结构与 `meta.json` 字段见 [.github/bundle-layout.README.md](.github/bundle-layout.README.md)。合集证书只在 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,根目录不再有 `eec.pem`;它只证明签名者身份,不进任何清单。根证书不进分发内容,由 online-data 分支分发,网页用内嵌的根证书指纹核对。
+目录命名、`versions.json` 结构与 `meta.json` 字段见 [.github/bundle-layout.README.md](.github/bundle-layout.README.md)。合集证书只在 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,根目录不再有 `eec.pem`;它只证明签名者身份,不进任何清单。根证书不进分发内容,由 DeepSeek-Chat-Enhanced 的 `certs` 分支分发,网页用内嵌的根证书指纹核对。
 
 ## 签名与校验
 

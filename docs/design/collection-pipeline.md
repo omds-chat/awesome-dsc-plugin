@@ -147,7 +147,7 @@
 |:---:|:---:|
 | 存档对象 | 三层清单 `manifest.json`，按层、按目录原样保存 |
 | 写回目标 | 本仓库的 `ci-memory` 分支，与 `main` 无公共祖先 |
-| 同类做法 | 与本仓库的 `online-data`、`dist` 这类分支一样，把派生状态放在独立分支，`main` 只留登记与源码 |
+| 同类做法 | 与 DeepSeek-Chat-Enhanced 的 `dist-history`、`certs`、`trusted-manifest` 这类并行分支一样，把派生状态放在独立分支，`main` 只留登记与源码 |
 | CI 读取 | 构建开始前从 `ci-memory` 的 `layer-manifests/` 读回上一版清单，只用于沿用 `revision`；脚本当前仍从已发布站点读回，改造属下一步实现 |
 | CI 写回 | 本次构建与全部校验通过后，把新清单写回该分支；写回失败即中止发布 |
 | 读回范围 | 只需要清单本体：`revision` 与 `files` 都在清单里，验签不参与本步骤 |
@@ -207,7 +207,7 @@
 |:---:|:---:|:---:|:---:|
 | 合集终端签名证书 | `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | 否 | 是 |
 | 与私钥配对的公钥 | `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec-secret.pub` | 否 | 是 |
-| 根证书 | 不在本仓库的分发内容内，由 DeepSeek-Chat-Enhanced 的 `online-data` 分支分发，网页用内嵌指纹核对 | 否 | 否 |
+| 根证书 | 不在本仓库的分发内容内，由 DeepSeek-Chat-Enhanced 的 `certs` 分支分发，网页用内嵌指纹核对 | 否 | 否 |
 | 合集签名私钥 | 只从 CI secret 注入，入库即违规 | 不适用 | 否 |
 | 根证书私钥 | 只在根证书机构的离线环境持有 | 不适用 | 否 |
 
