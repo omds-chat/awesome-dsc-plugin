@@ -30,13 +30,15 @@
  *   plugins/<作者>/<插件>/manifest.json(+ .sig)          L3
  *   plugins/<作者>/<插件>/<版本>/{meta.json,plugin.js,plugin.js.sig[,plugin.js.author.sig]}
  *
- * 两类问题的处理边界,实现里严格区分:
+ * 三类问题的处理边界,实现里严格区分:
  *   登记不合规   catalog 里的文件本身不合法(缺字段、name 与目录不符、tags 结构或取值不合规等)。
  *                这是作者需要修正的登记错误,构建以非零退出码中止,一个插件都不发布。
  *   运行期异常   作者站点拉取失败(网络、HTTP 4xx/5xx)、远端 versions.json 不合法、
- *                远端 meta.json 与登记不符、plugin.js 为空、plugin.js 命中网络自建调用等。
+ *                远端 meta.json 与登记不符、plugin.js 为空等。
  *                只剔除该插件,其余插件照常构建与发布;
  *                剔除项写入 catalog/anomalies.json,由 scripts/report-build-anomalies.mjs 上报到仓库 Issue。
+ *   网络约定提示 plugin.js 命中网络自建调用只记警告,插件照常收录,不写入 anomalies.json。
+ *                这是收录契约而不是沙箱:扫描只提示写法,不拦截插件运行期行为,也不改变退出码。
  *   签名失败、清单生成失败、分发自检失败既不是登记错误也不是单个插件的问题,仍按构建失败处理。
  *   作者签名是另一类:它是可选证据,拉取失败、为空或验签失败都只记警告,从不剔除插件、也不让构建失败。
  *
@@ -73,7 +75,7 @@ import { formatProblems, verifyCollection } from './lib/collection-verify.mjs'
 import { buildLayerManifests, listLayerDirs, problem } from './lib/layer-manifests.mjs'
 import { buildAnomalyReport, buildCatalogIndex } from './lib/catalog-index.mjs'
 import { readCollectionMeta } from './lib/collection-meta.mjs'
-import { scanPluginSource, summarizeNetworkHits } from './lib/plugin-network-scan.mjs'
+import { NETWORK_SELFTALK_ADVICE, PLUGIN_NETWORK_SELFTALK, scanPluginSource, summarizeNetworkHits } from './lib/plugin-network-scan.mjs'
 import {
   EEC_CERT_REL_IN_CERTS,
   EEC_CERT_RELATIVE,
@@ -389,11 +391,12 @@ function signPlugins(root, signer, problems) {
 /**
  * 从作者站点拉取一个插件的全部版本产物,先放进内存。
  * 只有全部版本都通过校验才落盘,因此单个插件不会在 plugins 树里留下半成品目录。
+ * plugin.js 命中网络自建调用只警告,不影响该版本的收录。
  * @param {object} plugin catalog 里的插件记录
- * @param {{timeoutMs: number}} options 选项
+ * @param {{timeoutMs: number, problems: Array<object>}} options 选项
  * @returns {Promise<{latest: string, versions: string[], releases: Array<object>}>}
  */
-async function pullPlugin(plugin, { timeoutMs }) {
+async function pullPlugin(plugin, { timeoutMs, problems }) {
   let versionsInfo
   try {
     versionsInfo = await fetchVersions(plugin.baseUrl, { timeoutMs })
@@ -421,14 +424,18 @@ async function pullPlugin(plugin, { timeoutMs }) {
     if (!payload.pluginJs || payload.pluginJs.length === 0) {
       throw new StageError('bundle', version + ' 的 plugin.js 为空')
     }
-    // 收录侧门禁:插件不得自建网络通道。命中即剔除该插件,作者改用 context.net 后重新发布即可回到分发内容
-    const scan = scanPluginSource(payload.pluginJs.toString('utf8'), {
-      relative: 'plugins/' + plugin.author + '/' + plugin.dirName + '/' + version + '/plugin.js',
-    })
+    // 收录侧契约检查:插件自行联网不符合约定,但只记警告,不剔除插件、不阻断发布。
+    // 这是契约不是沙箱:扫描只提示写法,不拦截运行期行为。
+    const relative = 'plugins/' + plugin.author + '/' + plugin.dirName + '/' + version + '/plugin.js'
+    const scan = scanPluginSource(payload.pluginJs.toString('utf8'), { relative })
     if (scan.total > 0) {
-      throw new StageError(
-        'network',
-        version + ' 的 plugin.js 命中网络自建调用:' + summarizeNetworkHits(scan.hits) + ';插件不得自建网络通道,请改用宿主提供的 context.net',
+      problems.push(
+        problem(
+          'warning',
+          PLUGIN_NETWORK_SELFTALK,
+          version + ' 的 plugin.js 命中网络自建调用：' + summarizeNetworkHits(scan.hits) + '。' + NETWORK_SELFTALK_ADVICE,
+          relative,
+        ),
       )
     }
     releases.push({ version, meta, pluginJs: payload.pluginJs, authorSig: payload.authorSig, authorSigNote: payload.authorSigNote })
@@ -471,7 +478,7 @@ async function writePluginsTree({ staging, catalog, anomalies, problems, timeout
     const pulledPlugins = []
     for (const plugin of author.plugins) {
       try {
-        const pulled = await pullPlugin(plugin, { timeoutMs })
+        const pulled = await pullPlugin(plugin, { timeoutMs, problems })
         pulledPlugins.push({ plugin, pulled })
         // 作者签名是可选项:取不到或为空只记警告,插件照常收录
         for (const release of pulled.releases) {
@@ -835,7 +842,13 @@ async function main() {
         process.stderr.write('分发包自检未通过,共 ' + result.errorCount + ' 个错误:\n' + formatProblems(result.problems) + '\n')
         return 1
       }
+      // 拉取阶段已对每个 plugin.js 给出网络约定警告;自检用的是同一份规则与同一批文件,
+      // 同一路径的命中不再重复打印,避免构建日志里同一处命中出现两次。
+      const networkWarned = new Set(
+        problems.filter((item) => item.code === PLUGIN_NETWORK_SELFTALK).map((item) => item.path),
+      )
       for (const warning of result.problems) {
+        if (warning.code === PLUGIN_NETWORK_SELFTALK && networkWarned.has(warning.path)) continue
         process.stdout.write('[警告] ' + warning.code + ' ' + warning.message + '\n')
       }
     } else {

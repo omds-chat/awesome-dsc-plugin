@@ -137,14 +137,15 @@ pages 包里的 `catalog/index.json` 只供本站站点自己展示,不作为插
 
 根级 `plugins.json` 与 `catalog/index.json` 同属统计清单,给作者自查、速览与第三方搜索用,不是宿主读取插件信息的通道:宿主按 `plugins.json` 与三层清单逐层取件。两者都只描述本次发布收录了什么,区别在于 `plugins.json` 被 L1 清单覆盖、`catalog/index.json` 不进任何清单。逐文件的生成者、消费者与签名归属见 [docs/design/pages-artifacts.md](../docs/design/pages-artifacts.md)。
 
-### 登记错误与运行期异常的边界
+### 登记错误、运行期异常与网络约定提示的边界
 
-构建把「作者要改的东西」和「运行期偶然失败」分开处理,这条边界在 `scripts/build-from-catalog.mjs` 里实现:
+构建把登记错误、运行期异常与网络约定提示分开处理,这条边界在 `scripts/build-from-catalog.mjs` 里实现:
 
 | 类别 | 判定 | 构建行为 |
 |:---:|:---:|:---:|
 | 登记不合规 | `catalog/` 里的文件本身不合法:缺字段、`name` 与目录不符、`tags` 结构不合法或标签不在预设清单内、公钥不可解析 | 登记错误,构建以非零退出码中止,一个插件都不发布,等待作者修正 |
-| 运行期异常 | 作者站点拉取失败(网络、HTTP 4xx/5xx)、远端 `versions.json` 不合法、远端 `meta.json` 与登记不符、`plugin.js` 为空、`plugin.js` 命中网络自建扫描(`PLUGIN_NETWORK_SELFTALK`) | 只把该插件从本次发布剔除,其余插件照常发布;剔除项写入 `catalog/anomalies.json` 并上报到仓库 Issue |
+| 运行期异常 | 作者站点拉取失败(网络、HTTP 4xx/5xx)、远端 `versions.json` 不合法、远端 `meta.json` 与登记不符、`plugin.js` 为空 | 只把该插件从本次发布剔除,其余插件照常发布;剔除项写入 `catalog/anomalies.json` 并上报到仓库 Issue |
+| 网络约定提示 | `plugin.js` 命中网络自建扫描(`PLUGIN_NETWORK_SELFTALK`) | 只记警告,插件照常发布,不写入 `catalog/anomalies.json`;这是收录契约而不是沙箱 |
 
 剔除是「本次不发布」,不是「解除登记」:插件目录仍留在 `catalog/` 里,修好站点后下次 Release 会自动回到发布里。真要解除托管,见下节「下架」。
 

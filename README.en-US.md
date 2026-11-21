@@ -184,7 +184,7 @@ Both sides are required: a `plugin.js.author.sig` without `author_pub.pem`, or a
 
 ### Verification rules
 
-`pnpm verify:bundle` checks every item below against the built pages bundle and exits non-zero with the full problem list if any of them fails. Every problem names its layer and file path.
+`pnpm verify:bundle` checks every item below against the built pages bundle. Except for rule 12, which only warns, any failure exits non-zero with the full problem list. Every problem names its layer and file path.
 
 | # | Rule |
 |:---:|:---:|
@@ -199,13 +199,13 @@ Both sides are required: a `plugin.js.author.sig` without `author_pub.pem`, or a
 | 9 | Coverage matches the layer exactly: every required file is listed and nothing extra is, so L3 never lists `plugin.js` or `plugin.js.sig` |
 | 10 | Every recorded SHA-512 matches the file contents, and a mismatch names the layer and the file |
 | 11 | Every `manifest.json.sig` verifies against the root certificate and `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`; a failure is an error |
-| 12 | Every `plugin.js` gets a static self-built-network scan: a global `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `navigator.sendBeacon`, or an `import(` of a remote address (`http://`, `https://`, `//`) reports `PLUGIN_NETWORK_SELFTALK` with the matched literal and its line and column; a plugin must not open its own network channel and may only reach the network through the host's `context.net` |
+| 12 | Every `plugin.js` gets a static self-built-network scan: a global `fetch(`, `XMLHttpRequest`, `WebSocket`, `EventSource`, `navigator.sendBeacon`, or an `import(` of a remote address (`http://`, `https://`, `//`) reports a `PLUGIN_NETWORK_SELFTALK` warning with the matched literal and its line and column; plugins opening their own network channel do not follow the convention and should use the host's network capability instead. This is an inclusion contract, not a sandbox: a hit only warns and never blocks inclusion |
 
-### Plugins must not open their own network channel
+### Plugins opening their own network channel: a warning-only inclusion contract
 
-Network access is supplied by the host through `context.net`. A plugin may forward or wrap it, but must not open a channel of its own: a self-built channel bypasses the host's connection policy, timeouts and observability, so the same plugin behaves differently on every host and its origins and permissions cannot be bounded. That is why the rule is enforced on the collection side instead of at runtime.
+Network access should go through the host's `context.net`. A plugin may forward or wrap it, but should not open a channel of its own: a self-built channel bypasses the host's connection policy, timeouts and observability, so the same plugin behaves differently on every host and its origins and permissions cannot be bounded. This is an inclusion contract, not a sandbox: a hit only produces a warning during the build and the bundle self-check. It never blocks inclusion and never intercepts the plugin at runtime.
 
-`scripts/lib/plugin-network-scan.mjs` scans every `plugin.js` and reports `PLUGIN_NETWORK_SELFTALK` for each hit, with the matched literal and its line and column:
+`scripts/lib/plugin-network-scan.mjs` scans every `plugin.js` and reports a `PLUGIN_NETWORK_SELFTALK` warning for each hit, with the matched literal and its line and column:
 
 | Literal | Meaning |
 |:---:|:---:|
@@ -218,13 +218,13 @@ Network access is supplied by the host through `context.net`. A plugin may forwa
 
 Only direct calls on a global object match: the character before the method name is not a dot, or the call is explicitly written on `window`, `globalThis`, `self` or `global`. Forwarding and wrapping, such as `context.net.fetch(...)` or `net.fetch(...)`, are therefore untouched, and handing the host network capability to an internal module stays allowed.
 
-This is a static text match, not a JavaScript parser, so it can misfire: the same words in comments, strings or regular expressions are reported too, while aliasing a global first (`const send = fetch; send(url)`) is not caught. On a misfire the author explains it in a code comment or in the pull request, or rewrites the call as a `context.net` forward. The rule constrains the shape of the artifact: it is an inclusion gate, not runtime protection, and says nothing about runtime behaviour.
+This is a static text match, not a JavaScript parser, so it can misfire: the same words in comments, strings or regular expressions are reported too, while aliasing a global first (`const send = fetch; send(url)`) is not caught. On a misfire the author explains it in a code comment or in the pull request, or rewrites the call as a `context.net` forward. The rule describes the shape of the artifact: it is an inclusion contract, not a sandbox and not runtime protection, and says nothing about runtime behaviour.
 
-On a hit, the build excludes that plugin from the release and records the reason in `catalog/anomalies.json` and the issue; for an assembled pages bundle, `pnpm verify:bundle` fails with a non-zero exit code.
+On a hit, the build only records a warning and publishes the plugin as usual without touching `catalog/anomalies.json`; for an assembled pages bundle, `pnpm verify:bundle` also only warns and its exit code does not change.
 
 ### Verification semantics
 
-- Pre-release verification in this repository is strict: `scripts/build-from-catalog.mjs` and every CI step abort with a non-zero exit code on any error, so non-compliant content is never distributed. Repository-level verification `pnpm verify:catalog` only checks the structure and certificate material of `catalog/` and `certs/` and needs no build output; the strict check for the pages bundle is `pnpm verify:bundle`, which covers the three manifests, their signatures, artifact signatures and cross-consistency; author signatures are outside that strict check, so a failed verification or an unpaired key and signature only warns and never changes the exit code. To relax missing manifests temporarily, pass `--allow-missing-manifest` to `scripts/verify-collection.mjs` directly. Without a root certificate the chain cannot be checked: `verify-collection.mjs` reports `ROOT_CA_MISSING` as an error and exits non-zero, while structure and hash checks still run; to run only those, add `--allow-placeholder-eec` (skeleton mode, which downgrades chain and signature problems to warnings). The artifact-side network scan runs both during the fetch stage of a build and in `pnpm verify:bundle`, and no `--allow-*` flag downgrades it to a warning.
+- Pre-release verification in this repository is strict: `scripts/build-from-catalog.mjs` and every CI step abort with a non-zero exit code on any error, so non-compliant content is never distributed. Repository-level verification `pnpm verify:catalog` only checks the structure and certificate material of `catalog/` and `certs/` and needs no build output; the strict check for the pages bundle is `pnpm verify:bundle`, which covers the three manifests, their signatures, artifact signatures and cross-consistency; author signatures are outside that strict check, so a failed verification or an unpaired key and signature only warns and never changes the exit code. To relax missing manifests temporarily, pass `--allow-missing-manifest` to `scripts/verify-collection.mjs` directly. Without a root certificate the chain cannot be checked: `verify-collection.mjs` reports `ROOT_CA_MISSING` as an error and exits non-zero, while structure and hash checks still run; to run only those, add `--allow-placeholder-eec` (skeleton mode, which downgrades chain and signature problems to warnings). The artifact-side network scan runs both during the fetch stage of a build and in `pnpm verify:bundle`, and a hit only warns and never changes the exit code.
 - Verification after distribution is lenient: on the plugin market side, certificate chain checks, plugin signature checks and web asset signature checks only warn. Author signatures behave the same way and only warn on failure. They never block and never fall back, and the user decides whether to continue.
 - Signatures cover file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere.
 
@@ -337,7 +337,7 @@ awesome-dsc-plugin/
 ├── scripts/                            verification and build scripts; read their inputs, write dist/pages
 │   ├── pki.mjs                         OpenSSL PKI wrapper, drives the CLI only
 │   ├── lib/collection-verify.mjs       shared verification logic
-│   ├── lib/plugin-network-scan.mjs     static self-built-network scan for plugin.js (inclusion gate)
+│   ├── lib/plugin-network-scan.mjs     static self-built-network scan for plugin.js (inclusion contract, warning only)
 │   ├── lib/catalog.mjs                 reads catalog registrations, fetches versions and artifacts via base_url
 │   ├── lib/catalog-index.mjs           generates catalog/index.json and catalog/anomalies.json
 │   ├── lib/layer-manifests.mjs         generates and signs the three manifests layer by layer
@@ -382,17 +382,18 @@ This collection does not enable download counting.
 ## Import flow
 
 1. Open a PR that registers the plugin in `catalog/`: `catalog/<author>/author.json`, `catalog/<author>/author_pub.pem` and `catalog/<author>/<plugin>/plugin.json`. Fields, schemas and the submission checks are documented in [catalog/README.md](catalog/README.md).
-2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC. Each fetched `plugin.js` first goes through the self-built-network scan, and a hit excludes that plugin from the release. An author signature that cannot be fetched or is empty is treated as absent: it only logs a warning and never excludes the plugin.
+2. After merge, CI pulls every registration at Release time: it fetches `versions.json` from `base_url` plus each version's `meta.json`, `plugin.js` and optional `plugin.js.author.sig`, writes them into the bundle's `plugins/` directory and re-signs every `plugin.js` with the collection EEC. Each fetched `plugin.js` first goes through the self-built-network scan, where a hit only logs a warning and the plugin is still included. An author signature that cannot be fetched or is empty is treated as absent: it only logs a warning and never excludes the plugin.
 3. It assembles the pages bundle: the site output goes to the root, `meta.json` and `tags.json` come from `site/`, the plugin index `plugins.json` is generated from `catalog/`, `catalog/` (with `removed.json`, minus the authors and plugins excluded from this release) and `certs/` are copied over, `catalog/index.json` and `catalog/anomalies.json` are then written, and the L1, L2 and L3 manifests are generated and signed layer by layer.
 4. It cross-checks the result: `scripts/verify-catalog-consistency.mjs` compares `catalog/index.json`, `plugins.json`, `plugins/author_manifest.json`, the `catalog/` copy and the `plugins/` tree, and aborts with a non-zero exit code listing every difference.
 5. It publishes: CI verifies every manifest and every `plugin.js` independently with `openssl`, then checks the bundle layout, and only when everything passes writes the new manifests and signatures back to the `ci-memory` branch and pushes them before replacing the published site wholesale, keeping no versions. A failed write-back aborts the release.
 
-The build separates two kinds of problem; the boundary is implemented in `scripts/build-from-catalog.mjs` and documented in [catalog/README.md](catalog/README.md):
+The build separates three kinds of problem; the boundary is implemented in `scripts/build-from-catalog.mjs` and documented in [catalog/README.md](catalog/README.md):
 
 | Kind | Decision | Build behaviour |
 |:---:|:---:|:---:|
 | Invalid registration | A registration file in `catalog/` is itself invalid: missing fields, `name` not matching its directory, malformed `tags`, or a tag outside the `tags.json` preset list | A registration error: the build aborts with a non-zero exit code, no plugin is published, and the author fixes the registration |
-| Runtime anomaly | The author site fails to fetch (network, HTTP 4xx/5xx), the remote `versions.json` is invalid, the remote `meta.json` disagrees with the registration, `plugin.js` is empty, or `plugin.js` trips the self-built-network scan (`PLUGIN_NETWORK_SELFTALK`) | Only that plugin is excluded from this release; every other plugin is built and published as usual, and the exclusion goes into `catalog/anomalies.json` and is reported as an issue |
+| Runtime anomaly | The author site fails to fetch (network, HTTP 4xx/5xx), the remote `versions.json` is invalid, the remote `meta.json` disagrees with the registration, or `plugin.js` is empty | Only that plugin is excluded from this release; every other plugin is built and published as usual, and the exclusion goes into `catalog/anomalies.json` and is reported as an issue |
+| Network contract notice | `plugin.js` trips the self-built-network scan (`PLUGIN_NETWORK_SELFTALK`) | Only a warning is recorded; the plugin is built and published as usual and nothing goes into `catalog/anomalies.json`; this is an inclusion contract, not a sandbox |
 
 Signing failures, manifest generation failures and bundle self-check failures are neither an author registration error nor a single-plugin runtime problem, so they still fail the build.
 

@@ -116,7 +116,7 @@ openssl cms -verify -binary -md sha512 -inform DER \
 node scripts/write-ci-memory.mjs --bundle dist/pages --ci-memory single-branch/ci-memory
 ```
 
-流水线步骤依次为:安装依赖、检出 `main` 与 `ci-memory` 两条分支、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中即剔除该插件)、用 EEC 重新签名 `plugin.js`、按层读回上一版并生成与签名三层清单、
+流水线步骤依次为:安装依赖、检出 `main` 与 `ci-memory` 两条分支、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中只警告,不剔除插件)、用 EEC 重新签名 `plugin.js`、按层读回上一版并生成与签名三层清单、
 组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、写回 `ci-memory` 并推送、上报剔除项、上传并部署。
 
 写回由 `scripts/write-ci-memory.mjs` 做文件镜像、由流水线用 `git` 提交并推送,命令与本地复现一致:
@@ -135,12 +135,13 @@ git -C single-branch/ci-memory push origin HEAD:ci-memory
 
 ## 七、异常插件与上报
 
-构建把两类问题严格分开,边界在 `scripts/build-from-catalog.mjs` 里实现:
+构建把三类问题严格分开,边界在 `scripts/build-from-catalog.mjs` 里实现:
 
 | 类别 | 判定 | 构建行为 |
 |:---:|:---:|:---:|
 | 登记不合规 | `catalog/` 里的文件本身不合法(缺字段、`name` 与目录不符、`tags` 结构或取值不合规、公钥不可解析) | 登记错误,构建以非零退出码中止,不发布任何插件 |
 | 运行期异常 | 作者站点拉取失败、远端 `versions.json` 不合法、远端 `meta.json` 与登记不符、`plugin.js` 为空 | 只剔除该插件,其余插件照常发布;剔除项写入 `catalog/anomalies.json` |
+| 网络约定提示 | `plugin.js` 命中网络自建扫描(`PLUGIN_NETWORK_SELFTALK`) | 只记警告,插件照常发布,不写入 `catalog/anomalies.json`;这是收录契约而不是沙箱 |
 
 剔除项由 `scripts/report-build-anomalies.mjs` 上报到本仓库 Issue:
 

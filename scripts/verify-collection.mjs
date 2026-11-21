@@ -6,7 +6,7 @@
  * 与 build-collection.mjs 共用 lib/collection-verify.mjs 的校验逻辑,只读不写。
  * 校验覆盖:证书链、三层哈希清单(存在性、结构、路径、覆盖范围、SHA-512、清单签名)、
  * 版本目录必需文件与 plugin.js.sig、作者签名、标签与插件登记的一致性,
- * 以及 plugin.js 的网络自建静态扫描(命中报 PLUGIN_NETWORK_SELFTALK,插件不得自建网络通道)。
+ * 以及 plugin.js 的网络自建静态扫描(命中报 PLUGIN_NETWORK_SELFTALK 警告,只警告、不阻断)。
  * 证书链与 CMS 签名校验需要根证书:用 --root-ca 指定,或设置环境变量 ROOT_CA_PATH。
  *
  * 用法:

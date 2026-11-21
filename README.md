@@ -184,7 +184,7 @@ openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -conten
 
 ### 校验规则
 
-`pnpm verify:bundle` 对构建出的 pages 包逐项检查,任一错误都以非零退出码结束并一次性列出全部问题,每条都带层号与文件路径。
+`pnpm verify:bundle` 对构建出的 pages 包逐项检查,除第 12 条只警告外,任一错误都以非零退出码结束并一次性列出全部问题,每条都带层号与文件路径。
 
 | 编号 | 规则 |
 |:---:|:---:|
@@ -199,13 +199,13 @@ openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -conten
 | 9 | 覆盖范围与该层应有的文件严格相等:该有的都在清单里,清单里没有多余项,L3 不得出现 `plugin.js` 与 `plugin.js.sig` |
 | 10 | 清单记录的每个 SHA-512 与文件实际内容一致,不一致时报出层号与具体文件 |
 | 11 | 每层 `manifest.json.sig` 用根证书与 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 验签,失败即报错 |
-| 12 | 每个版本的 `plugin.js` 做网络自建静态扫描:出现全局 `fetch(`、`XMLHttpRequest`、`WebSocket`、`EventSource`、`navigator.sendBeacon`,或以 `http://`、`https://`、`//` 开头的 `import(` 即报 `PLUGIN_NETWORK_SELFTALK`,并给出命中的字面量与所在行、列;插件不得自建网络通道,网络能力只能经宿主的 `context.net` 取得 |
+| 12 | 每个版本的 `plugin.js` 做网络自建静态扫描:出现全局 `fetch(`、`XMLHttpRequest`、`WebSocket`、`EventSource`、`navigator.sendBeacon`,或以 `http://`、`https://`、`//` 开头的 `import(` 即报 `PLUGIN_NETWORK_SELFTALK` 警告,并给出命中的字面量与所在行、列;插件自行联网不符合约定,建议改用宿主提供的网络能力;这是收录契约,不是沙箱,命中只警告、不阻断收录 |
 
-### 插件不得自建网络通道
+### 插件自行联网:只警告的收录契约
 
-插件需要的网络能力由宿主提供,统一走 `context.net`;插件可以转发或包装它,但不得自己开通道。自建通道会绕过宿主的连接策略、超时与可观测性,同一个插件在不同宿主上的来源与权限因此无从约束,所以这一条放在收录侧把关,不留给运行时兜底。
+插件需要的网络能力应统一走宿主提供的 `context.net`;插件可以转发或包装它,但不宜自己开通道。自行联网会绕过宿主的连接策略、超时与可观测性,同一个插件在不同宿主上的来源与权限也无从约束。这一条是收录侧的契约,不是沙箱:命中只在构建与分发自检时给警告,不阻断收录,也不拦截插件运行期的任何行为。
 
-`scripts/lib/plugin-network-scan.mjs` 对每个版本的 `plugin.js` 做静态扫描,命中即报 `PLUGIN_NETWORK_SELFTALK`,并给出命中的字面量与所在行、列:
+`scripts/lib/plugin-network-scan.mjs` 对每个版本的 `plugin.js` 做静态扫描,命中即报 `PLUGIN_NETWORK_SELFTALK` 警告,并给出命中的字面量与所在行、列:
 
 | 命中字面量 | 说明 |
 |:---:|:---:|
@@ -218,13 +218,13 @@ openssl cms -verify -binary -md sha512 -inform DER -in manifest.json.sig -conten
 
 判定只针对全局对象上的直接调用:方法名前一个字符不是点号,或者前面明确写着 `window`、`globalThis`、`self`、`global` 这类全局对象。因此 `context.net.fetch(...)`、`net.fetch(...)` 这类转发与包装不受影响,插件把宿主的网络能力转手给内部模块是允许的。
 
-这是静态文本匹配,不解析 JavaScript,已知会误伤:注释、字符串、正则字面量里出现同名字样同样报错;把全局方法赋给别名再调用(例如 `const send = fetch; send(url)`)反而不会命中。误伤时由作者在代码注释或 PR 说明里解释清楚,或把调用改写为 `context.net` 转发。它拦住的是产物的写法,是收录门禁,不是运行时防护,不保证运行期行为。
+这是静态文本匹配,不解析 JavaScript,已知会误伤:注释、字符串、正则字面量里出现同名字样同样告警;把全局方法赋给别名再调用(例如 `const send = fetch; send(url)`)反而不会命中。误伤时由作者在代码注释或 PR 说明里解释清楚,或把调用改写为 `context.net` 转发。它提示的是产物的写法,是收录约定,不是沙箱也不是运行时防护,不保证运行期行为。
 
-命中后的后果:构建期该插件从本次发布剔除,原因写入 `catalog/anomalies.json` 并上报 Issue;对已组装的 pages 包,`pnpm verify:bundle` 直接报错并以非零退出码结束。
+命中后的后果:构建期只写一条警告,插件照常发布,不写入 `catalog/anomalies.json`;对已组装的 pages 包,`pnpm verify:bundle` 同样只警告,退出码不变。
 
 ### 校验语义
 
-- 本仓库发布前的校验是强校验:`scripts/build-from-catalog.mjs` 与 CI 的每一步遇到错误都以非零退出码中止,不合规的内容不会被分发。仓库级校验 `pnpm verify:catalog` 只查 `catalog/` 与 `certs/` 的结构与证书材料,不要求任何构建产物;pages 包的强校验是 `pnpm verify:bundle`,三层清单、清单签名、产物签名与收录信息交叉一致性都在这一步检查;作者签名不在强校验之内,验签失败与两侧不齐只警告,不改变退出码。要临时放开清单缺失,可对 `scripts/verify-collection.mjs` 直接加 `--allow-missing-manifest`。不给根证书时无法校验证书链,`verify-collection.mjs` 报 `ROOT_CA_MISSING` 错误并以非零退出码结束,结构与哈希检查照常执行;只做结构与哈希检查时加 `--allow-placeholder-eec`(骨架模式,证书链与签名降级为警告)。产物侧的网络自建扫描在构建的拉取阶段与 `pnpm verify:bundle` 两处都执行,`--allow-*` 参数不会把它降级为警告。
+- 本仓库发布前的校验是强校验:`scripts/build-from-catalog.mjs` 与 CI 的每一步遇到错误都以非零退出码中止,不合规的内容不会被分发。仓库级校验 `pnpm verify:catalog` 只查 `catalog/` 与 `certs/` 的结构与证书材料,不要求任何构建产物;pages 包的强校验是 `pnpm verify:bundle`,三层清单、清单签名、产物签名与收录信息交叉一致性都在这一步检查;作者签名不在强校验之内,验签失败与两侧不齐只警告,不改变退出码。要临时放开清单缺失,可对 `scripts/verify-collection.mjs` 直接加 `--allow-missing-manifest`。不给根证书时无法校验证书链,`verify-collection.mjs` 报 `ROOT_CA_MISSING` 错误并以非零退出码结束,结构与哈希检查照常执行;只做结构与哈希检查时加 `--allow-placeholder-eec`(骨架模式,证书链与签名降级为警告)。产物侧的网络自建扫描在构建的拉取阶段与 `pnpm verify:bundle` 两处都执行,命中只警告、不改变退出码。
 - 分发出去之后的校验是弱校验:插件市场对网页文件签名、插件签名、证书链校验失败只警告,不阻断,不做兜底。作者签名同理,失败只警告。警告由用户决定是否继续,市场不会替用户静默放行。
 - 签名覆盖文件原始字节。换行、缩进或空白的任何改动都会让校验失败,仓库统一使用 LF。
 
@@ -337,7 +337,7 @@ awesome-dsc-plugin/
 ├── scripts/                            校验与构建脚本,只读输入、按需产出 dist/pages
 │   ├── pki.mjs                         OpenSSL PKI 封装,只调用命令行不做密码学
 │   ├── lib/collection-verify.mjs       三层清单与签名的校验逻辑
-│   ├── lib/plugin-network-scan.mjs     plugin.js 的网络自建静态扫描(收录侧门禁)
+│   ├── lib/plugin-network-scan.mjs     plugin.js 的网络自建静态扫描(收录侧契约,命中只警告)
 │   ├── lib/catalog.mjs                 读取 catalog 登记并按 base_url 拉取版本与产物
 │   ├── lib/catalog-index.mjs           生成 catalog/index.json 与 catalog/anomalies.json
 │   ├── lib/layer-manifests.mjs         按层生成并签名三层清单
@@ -382,17 +382,18 @@ awesome-dsc-plugin/
 ## 收录流程
 
 1. 提交 PR,在 `catalog/` 登记插件:`catalog/<作者>/author.json`、`catalog/<作者>/author_pub.pem`、`catalog/<作者>/<插件>/plugin.json`。字段、schema 与提交校验见 [catalog/README.md](catalog/README.md)。
-2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。拉取到的 `plugin.js` 先做网络自建静态扫描,命中的插件剔除本次发布。作者签名取不到或为空按没有签名处理,只记警告,不影响该插件收录。
+2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。拉取到的 `plugin.js` 先做网络自建静态扫描,命中只记警告,插件照常收录。作者签名取不到或为空按没有签名处理,只记警告,不影响该插件收录。
 3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,插件目录索引 `plugins.json` 由 catalog 生成,`catalog/`(含 `removed.json`,本次剔除的作者与插件不在其中)与 `certs/` 复制进来,再在 `catalog/` 下写入 `index.json` 与 `anomalies.json`,并按层生成、签名 L1、L2、L3 三层清单。
 4. 交叉校验:`scripts/verify-catalog-consistency.mjs` 比对 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止并列出差异。
 5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,全部通过后把新清单与签名写回 `ci-memory` 分支并推送,最后整体替换已发布站点,不做版本留存。写回失败即中止本次发布。
 
-构建把两类问题分开处理,边界写在 `scripts/build-from-catalog.mjs` 的实现与 [catalog/README.md](catalog/README.md) 里:
+构建把三类问题分开处理,边界写在 `scripts/build-from-catalog.mjs` 的实现与 [catalog/README.md](catalog/README.md) 里:
 
 | 类别 | 判定 | 构建行为 |
 |:---:|:---:|:---:|
 | 登记不合规 | `catalog/` 里的登记文件本身不合法:缺字段、`name` 与目录不符、`tags` 结构不合法或标签不在 `tags.json` 预设清单内 | 登记错误,构建以非零退出码中止,一个插件都不发布,等待作者修正后再发布 |
-| 运行期异常 | 作者站点拉取失败(网络、HTTP 4xx/5xx)、远端 `versions.json` 不合法、远端 `meta.json` 与登记不符、`plugin.js` 为空、`plugin.js` 命中网络自建扫描(`PLUGIN_NETWORK_SELFTALK`) | 只把该插件从本次发布剔除,其余插件照常构建与发布;剔除项写入 `catalog/anomalies.json` 并上报到仓库 Issue |
+| 运行期异常 | 作者站点拉取失败(网络、HTTP 4xx/5xx)、远端 `versions.json` 不合法、远端 `meta.json` 与登记不符、`plugin.js` 为空 | 只把该插件从本次发布剔除,其余插件照常构建与发布;剔除项写入 `catalog/anomalies.json` 并上报到仓库 Issue |
+| 网络约定提示 | `plugin.js` 命中网络自建扫描(`PLUGIN_NETWORK_SELFTALK`) | 只记警告,插件照常构建与发布,不写入 `catalog/anomalies.json`;这是收录契约而不是沙箱 |
 
 签名失败、清单生成失败与分发自检失败既不是某位作者的登记错误,也不是单个插件的运行期问题,仍按构建失败处理。
 

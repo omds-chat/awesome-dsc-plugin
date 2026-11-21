@@ -1,12 +1,13 @@
 /**
  * 产物静态扫描:检查 plugin.js 有没有自行发起网络调用。
  *
- * 契约:插件不得自建网络通道。插件需要网络能力时由宿主提供 context.net,插件可以转发或包装它,
- * 但不得直接使用全局 fetch、XMLHttpRequest、WebSocket、EventSource、navigator.sendBeacon,
- * 也不得用 import() 加载远程地址。
+ * 契约:插件自行联网不符合约定。插件需要网络能力时应由宿主经 context.net 提供,插件可以转发或包装它,
+ * 但不宜直接使用全局 fetch、XMLHttpRequest、WebSocket、EventSource、navigator.sendBeacon,
+ * 也不宜用 import() 加载远程地址。
  *
- * 这是收录侧门禁,不是运行时拦截:只读产物字节、按文本匹配,命中报 PLUGIN_NETWORK_SELFTALK,
- * 并指出命中的字面量与所在行、列。构建期命中让该插件从本次发布剔除;分发自检命中记为错误。
+ * 这是收录侧的契约检查,不是沙箱,也不是运行时拦截:只读产物字节、按文本匹配,命中报
+ * PLUGIN_NETWORK_SELFTALK 警告,并指出命中的字面量与所在行、列。构建期与分发自检命中都只警告,
+ * 不阻断收录、不改变退出码;扫描器不拦截插件运行期的任何行为,也不保证运行期是否联网。
  *
  * 判定口径:只匹配全局对象上的直接调用——方法名前一个字符不是点号,或前面明确写着 window、
  * globalThis、self、global 这类全局对象。因此 context.net.fetch(...)、net.fetch(...) 这类
@@ -18,8 +19,15 @@
  */
 import { readFileSync } from 'node:fs'
 
-/** 命中网络自建调用时使用的问题代码 */
+/** 命中网络自建调用时使用的问题代码。命中只产生警告,不阻断收录 */
 export const PLUGIN_NETWORK_SELFTALK = 'PLUGIN_NETWORK_SELFTALK'
+
+/**
+ * 命中后的统一提示语。构建与分发自检共用这一句,口径一致:
+ * 说明这是约定而非沙箱,给出改用宿主网络能力的建议,并为误伤留出说明与改写的出口。
+ */
+export const NETWORK_SELFTALK_ADVICE =
+  '插件自行联网不符合约定，建议改用宿主提供的网络能力；若为误伤可改写或加注释说明。本条只警告，不阻断收录'
 
 /** 方法名前一个字符不是点号、不是标识符字符 */
 const BOUNDARY = '(?<![\\w$.])'

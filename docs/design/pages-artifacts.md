@@ -39,7 +39,7 @@
 | `plugins/<作者>/<插件>/manifest.json` 与 `manifest.json.sig`（L3） | `layer-manifests.mjs` | 市场（第 6 步）；CI 独立验签；`collection-verify.mjs`；`consistency-verify.mjs`；站点探测 | 清单本身不进任何清单，只被同名 `.sig` 覆盖 | 是，每次发布重写；版本增删才改变条目集合 | 随该插件版本数增长，每版本一条 `meta.json` 记录；不含 `plugin.js` |
 | `plugins/<作者>/<插件>/versions.json` | `build-from-catalog.mjs`，取自作者站点同名文件 | 市场（第 7 步取版本列表与 `latest`）；`collection-verify.mjs`；`consistency-verify.mjs`；站点第 6 步 | 参与，L3 清单覆盖 | 是，每次发布重写 | 随版本数增长，每版本一个版本号字符串 |
 | `plugins/<作者>/<插件>/<x.y.z>/meta.json` | `build-from-catalog.mjs`，从作者站点拉取后原样写出，不改写字段 | 市场（第 8 步展示字段并比对 L3 摘要）；站点详情；`dependencies` 等字段按分发规范 v2 由宿主侧读取 | 参与，L3 清单覆盖 | 是，每次发布重写 | 常数级，随字段个数与描述文本长度 |
-| `plugins/<作者>/<插件>/<x.y.z>/plugin.js` | `build-from-catalog.mjs`，从作者站点拉取原始字节；拉取后由 `plugin-network-scan.mjs` 做网络自建静态扫描，命中即剔除该插件 | 引擎（加载执行）；市场（下载） | 不进任何清单，只由同目录 `plugin.js.sig` 覆盖 | 是，每次发布重写 | 随插件代码规模增长，单文件上限 1 MiB |
+| `plugins/<作者>/<插件>/<x.y.z>/plugin.js` | `build-from-catalog.mjs`，从作者站点拉取原始字节；拉取后由 `plugin-network-scan.mjs` 做网络自建静态扫描，命中只警告、插件照常收录；这是收录契约，不是沙箱 | 引擎（加载执行）；市场（下载） | 不进任何清单，只由同目录 `plugin.js.sig` 覆盖 | 是，每次发布重写 | 随插件代码规模增长，单文件上限 1 MiB |
 | `plugins/<作者>/<插件>/<x.y.z>/plugin.js.sig` | `build-from-catalog.mjs` 的 `signPlugins`，用合集 EEC 对原始字节重新签名 | 市场（第 9 步）；引擎加载前校验；CI openssl 独立验签 | 本身是签名 | 是，每次发布重签 | 常数级，CMS DER 签名与载荷大小无关 |
 | `plugins/<作者>/<插件>/<x.y.z>/plugin.js.author.sig` | 作者站点原样复制，缺失或为空只记警告 | 市场（第 10 步）；`collection-verify.mjs` 的弱校验 | 本身是作者签名；不进任何清单，也不受 EEC 覆盖 | 是，随发布复制 | 常数级，上限 64 KiB |
 

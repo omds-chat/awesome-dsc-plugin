@@ -2,7 +2,7 @@
  * 合集自洽性校验(PKI 版)。
  *
  * 校验对象是分发规范 v2 的合集目录结构:根目录的终端签名证书、三层哈希清单、
- * 作者公钥、插件清单、版本目录、逐文件 CMS 签名,以及 plugin.js 的网络自建静态扫描。
+ * 作者公钥、插件清单、版本目录、逐文件 CMS 签名,以及 plugin.js 的网络自建静态扫描(只警告,不阻断)。
  * 只读取文件,不修改任何内容;
  * build-collection.mjs 与 verify-collection.mjs 共用本模块。
  *
@@ -11,7 +11,8 @@
  *
  * 校验语义(见 .agents/signing-conventions.md 第六节):本脚本是发布前的强校验,
  * 任一项失败都以非零退出码结束;插件市场一侧的同类校验失败只警告,不阻断。
- * 作者签名是唯一的例外:它是可选证据,校验失败或公钥与签名两侧不齐都只警告,从不阻断收录。
+ * 作者签名是一个例外:它是可选证据,校验失败或公钥与签名两侧不齐都只警告,从不阻断收录。
+ * 产物网络自审同样只警告:插件自行联网是收录契约的提示,不是沙箱,不改变退出码。
  */
 import { createHash } from 'node:crypto'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
@@ -32,7 +33,7 @@ import {
   verifyFileAuthor,
   verifyFileCms,
 } from '../pki.mjs'
-import { PLUGIN_NETWORK_SELFTALK, describeNetworkHit, scanPluginFile } from './plugin-network-scan.mjs'
+import { NETWORK_SELFTALK_ADVICE, PLUGIN_NETWORK_SELFTALK, describeNetworkHit, scanPluginFile } from './plugin-network-scan.mjs'
 
 /**
  * 合集根目录必需的文件。tags.json 可选,存在时才要求被 L1 清单覆盖。
@@ -58,7 +59,7 @@ export const LAYER1_OPTIONAL_FILES = ['tags.json']
 export const LAYER2_FILES = ['author_pub.pem', 'plugin_manifest.json']
 /** L3 固定覆盖的文件,相对插件目录;其余覆盖项是每个版本的 meta.json */
 export const LAYER3_FILES = ['versions.json']
-/** 单个 plugin.js 逐条报出的网络自建命中上限,超出部分汇总成一条 */
+/** 单个 plugin.js 逐条报出的网络自建命中上限,超出部分汇总成一条。命中只记警告 */
 export const MAX_NETWORK_HITS = 20
 
 /** L3 明确不覆盖的产物本体,由每版本的 plugin.js.sig 独立签名 */
@@ -793,10 +794,12 @@ function inspectVersionMeta({ versionDir, versionRel, version, pluginName, repor
 }
 
 /**
- * 静态扫描一个版本的 plugin.js:插件不得自建网络通道。
+ * 静态扫描一个版本的 plugin.js:插件自行联网不符合约定。
  *
- * 只读产物文本,不做运行时拦截;命中一条报一条,每条都带命中的字面量与行列位置。
- * 插件转发或包装 context.net 不受影响,判定口径见 lib/plugin-network-scan.mjs。
+ * 只读产物文本,不做运行时拦截;命中只报警告,不阻断收录、不改变退出码。
+ * 这是收录契约而不是沙箱:扫描只提示写法,插件运行期是否联网不受它约束。
+ * 命中一条报一条,每条都带命中的字面量与行列位置;插件转发或包装 context.net 不受影响,
+ * 判定口径见 lib/plugin-network-scan.mjs。
  * 单个文件最多逐条报 MAX_NETWORK_HITS 条,其余汇总成一条,避免问题列表被同一个文件刷屏。
  * @param {object} context 上下文
  * @param {string} context.versionDir 版本目录
@@ -818,14 +821,14 @@ function inspectVersionNetwork({ versionDir, versionRel, report, stats }) {
   if (scan.total === 0) return
   stats.networkHits += scan.total
   for (const hit of scan.hits.slice(0, MAX_NETWORK_HITS)) {
-    report.error(
+    report.warn(
       PLUGIN_NETWORK_SELFTALK,
-      rel + ' ' + describeNetworkHit(hit) + ':插件不得自建网络通道,请改用宿主提供的 context.net;若为误伤,请在注释中说明或改写调用',
+      rel + ' ' + describeNetworkHit(hit) + '：' + NETWORK_SELFTALK_ADVICE,
       rel,
     )
   }
   if (scan.total > MAX_NETWORK_HITS) {
-    report.error(
+    report.warn(
       PLUGIN_NETWORK_SELFTALK,
       rel + ' 另有 ' + (scan.total - MAX_NETWORK_HITS) + ' 处网络自建调用未逐条列出,合计 ' + scan.total + ' 处',
       rel,
