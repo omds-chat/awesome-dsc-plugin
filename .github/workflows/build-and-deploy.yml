@@ -23,13 +23,13 @@ concurrency:
 
 # 私钥只有两个来源:
 #   secrets.AWESOME_DSC_PLUGIN_EEC_SECRET  终端签名证书私钥(ECDSA P-256),只在本流程内存与临时目录中出现;
-#   secrets.ROOT_CA_PEM     根证书 PEM,用于校验证书链与全部 CMS 签名,不是私钥。
+#   secrets.DS_CHAT_ROOT_CA     根证书 PEM,用于校验证书链与全部 CMS 签名,不是私钥。
 # 根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,绝不出现在本流程。
 # 合集证书的固定位置是 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt;pages 根目录不放 eec.pem。
 env:
-  EEC_SECRET_KEY: ${{ secrets.AWESOME_DSC_PLUGIN_EEC_SECRET }}
-  EEC_CERT_PEM: ${{ secrets.AWESOME_DSC_PLUGIN_EEC }}
-  ROOT_CA_PEM: ${{ secrets.ROOT_CA_PEM }}
+  AWESOME_DSC_PLUGIN_EEC_SECRET: ${{ secrets.AWESOME_DSC_PLUGIN_EEC_SECRET }}
+  AWESOME_DSC_PLUGIN_EEC: ${{ secrets.AWESOME_DSC_PLUGIN_EEC }}
+  DS_CHAT_ROOT_CA: ${{ secrets.DS_CHAT_ROOT_CA }}
   ROOT_CA_URL: ${{ vars.ROOT_CA_URL }}
   SITE_DIR: ${{ vars.SITE_DIR }}
   PUBLISHED_BASE_URL: ${{ vars.PUBLISHED_BASE_URL }}
@@ -73,20 +73,20 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # 根证书二选一,优先级从高到低:
-      #   1. secrets.ROOT_CA_PEM  根证书 PEM 文本,适合不便公开拉取的场景;
+      #   1. secrets.DS_CHAT_ROOT_CA  根证书 PEM 文本,适合不便公开拉取的场景;
       #   2. vars.ROOT_CA_URL     根证书下载地址。
       - name: Resolve root CA
         run: |
           set -euo pipefail
           target="$RUNNER_TEMP/root_ca.crt"
-          if [ -n "${ROOT_CA_PEM:-}" ]; then
-            printf '%s\n' "$ROOT_CA_PEM" > "$target"
-            echo "根证书来源: secrets.ROOT_CA_PEM"
+          if [ -n "${DS_CHAT_ROOT_CA:-}" ]; then
+            printf '%s\n' "$DS_CHAT_ROOT_CA" > "$target"
+            echo "根证书来源: secrets.DS_CHAT_ROOT_CA"
           elif [ -n "${ROOT_CA_URL:-}" ]; then
             curl -fsSL "$ROOT_CA_URL" -o "$target"
             echo "根证书来源: $ROOT_CA_URL"
           else
-            echo "::error::缺少根证书,请设置 secrets.ROOT_CA_PEM 或 vars.ROOT_CA_URL"
+            echo "::error::缺少根证书,请设置 secrets.DS_CHAT_ROOT_CA 或 vars.ROOT_CA_URL"
             exit 1
           fi
           echo "ROOT_CA_PATH=$target" >> "$GITHUB_ENV"
@@ -97,7 +97,7 @@ jobs:
         run: |
           set -euo pipefail
           target="certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt"
-          if [ -n "${EEC_CERT_PEM:-}" ]; then
+          if [ -n "${AWESOME_DSC_PLUGIN_EEC:-}" ]; then
             printf '%s\n' "$EEC_CERT_PEM" > "$target"
             echo "终端签名证书来源: secrets.AWESOME_DSC_PLUGIN_EEC"
           else

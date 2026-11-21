@@ -113,7 +113,7 @@ pages 包内各位置的必需与可选文件如下。它们只存在于构建�
 | 角色 | 承担者 | 持有物 | 签发对象 |
 |:---:|:---:|:---:|:---:|
 | 根证书机构(CA) | `DeepSeek-Chat-Enhanced` 仓库(组织主线仓库) | 根私钥(离线,不入库)、根证书 | 终端签名证书 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` |
-| 终端签名方(EEC) | 本仓库 | EEC 私钥(CI secret `EEC_SECRET_KEY`)、`certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | 三层清单与每个版本的 `plugin.js` 的 CMS 分离签名 |
+| 终端签名方(EEC) | 本仓库 | EEC 私钥(CI secret `AWESOME_DSC_PLUGIN_EEC_SECRET`)、`certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | 三层清单与每个版本的 `plugin.js` 的 CMS 分离签名 |
 | 独立签名方 | 插件作者,含 omds-chat 自身 | 作者密钥对 | `plugin.js` 的裸公钥分离签名 |
 
 ### 证书链
@@ -241,10 +241,10 @@ EEC 证书由 DeepSeek-Chat-Enhanced 仓库的根证书机构签发,本仓库不
 
 2. 把 `eec.csr` 提交给 DeepSeek-Chat-Enhanced 仓库(根 CA 维护方),说明用途、有效期与联系人。
 3. 拿回签发好的证书,写入本仓库的 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,根目录不再有 `eec.pem`。
-4. 把 `eec_secret.pem` 的内容放入 GitHub Actions secret `EEC_SECRET_KEY`,不要提交到仓库。
+4. 把 `eec_secret.pem` 的内容放入 GitHub Actions secret `AWESOME_DSC_PLUGIN_EEC_SECRET`,不要提交到仓库。
 5. 合并后 CI 用根证书校验 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 的签发链,链不通、证书过期、`keyUsage` 或 `basicConstraints` 不符都会中止构建。
 
-根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,本仓库与 CI 都拿不到,也不需要。仓库内提交的 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 只含公钥材料,由该根 CA 签发;CI 也支持用 secret `EEC_CERT_PEM` 临时覆盖它,覆盖后同样要先过证书链校验。
+根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,本仓库与 CI 都拿不到,也不需要。仓库内提交的 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 只含公钥材料,由该根 CA 签发;CI 也支持用 secret `AWESOME_DSC_PLUGIN_EEC` 临时覆盖它,覆盖后同样要先过证书链校验。
 
 ## 维护者自查脚本
 
@@ -461,7 +461,7 @@ pnpm install
 pnpm type            # 语法自检:全部脚本与站点源码都能被 Node 解析
 pnpm verify:catalog  # 仓库级校验,只读 catalog/ 与 certs/
 pnpm build:site      # 构建站点到 site/dist,产物进入 pages 包根目录
-pnpm build           # 需要 EEC_SECRET_KEY 与 ROOT_CA_PATH:按 catalog 组装 pages 包到 dist/pages
+pnpm build           # 需要 AWESOME_DSC_PLUGIN_EEC_SECRET 与 ROOT_CA_PATH:按 catalog 组装 pages 包到 dist/pages
 pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 ```
 
@@ -470,7 +470,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 - `pnpm build` 等价于直接调用 `scripts/build-from-catalog.mjs`,本地复现的完整形式:
 
   ```bash
-  EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
+  AWESOME_DSC_PLUGIN_EEC_SECRET=... ROOT_CA_PATH=root_ca.crt \
     node scripts/build-from-catalog.mjs \
     --catalog catalog --certs certs --site site/dist --out dist/pages \
     --ci-memory single-branch/ci-memory \
@@ -493,7 +493,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 
 - 签名不通过时插件市场会警告用户并建议重新下载,不会静默运行。
 - 收录不等于认证。签名只证明分发内容与签名者一致,不代表插件行为经过审查。
-- 私钥只放 CI secrets 与本地环境变量,不要提交。EEC 私钥放在 `EEC_SECRET_KEY`,根证书私钥永远不进本仓库。`.gitignore` 已排除 `.env`。
+- 私钥只放 CI secrets 与本地环境变量,不要提交。EEC 私钥放在 `AWESOME_DSC_PLUGIN_EEC_SECRET`,根证书私钥永远不进本仓库。`.gitignore` 已排除 `.env`。
 - 更换 EEC 密钥对必须同时换 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 并向 DeepSeek-Chat-Enhanced 仓库重新申请签发;旧证书签出的 CMS 签名将无法再验证。
 - 清单签名与产物签名覆盖文件字节。换行、缩进或空白的任何改动都会让校验失败,仓库统一使用 LF,作者产物也必须是 LF。
 - 插件产物建议行压缩,既减小体积,也避免无意义的空白差异。

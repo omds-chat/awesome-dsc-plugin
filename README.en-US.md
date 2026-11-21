@@ -113,7 +113,7 @@ The scheme is built on OpenSSL PKI, with three roles each holding one key, so wh
 | Role | Holder | Material | Signs |
 |:---:|:---:|:---:|:---:|
 | Root CA | `DeepSeek-Chat-Enhanced` repository (the organisation mainline) | root private key (offline, never committed), root certificate | end-entity signing certificate `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` |
-| End-entity signer (EEC) | this repository | EEC private key (CI secret `EEC_SECRET_KEY`), `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | detached CMS signatures for the three manifests and every version's `plugin.js` |
+| End-entity signer (EEC) | this repository | EEC private key (CI secret `AWESOME_DSC_PLUGIN_EEC_SECRET`), `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | detached CMS signatures for the three manifests and every version's `plugin.js` |
 | Independent signer | plugin authors, omds-chat included | author key pair | bare public key signature over `plugin.js` |
 
 ### Certificate chain
@@ -241,10 +241,10 @@ The EEC certificate is issued by the root CA of the DeepSeek-Chat-Enhanced repos
 
 2. Submit `eec.csr` to the DeepSeek-Chat-Enhanced repository (the root CA maintainer) with the purpose, validity period and contact.
 3. Write the issued certificate to `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` in this repository; the root no longer carries an `eec.pem`.
-4. Put the contents of `eec_secret.pem` into the GitHub Actions secret `EEC_SECRET_KEY`; never commit it.
+4. Put the contents of `eec_secret.pem` into the GitHub Actions secret `AWESOME_DSC_PLUGIN_EEC_SECRET`; never commit it.
 5. After merge, CI checks the chain of `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` against the root certificate and aborts on a broken chain, an expired certificate, or a `keyUsage` or `basicConstraints` mismatch.
 
-The root private key lives in the offline environment of the DeepSeek-Chat-Enhanced repository; this repository and CI neither have nor need it. The committed `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` carries public material only and is issued by that root CA; CI can also override it with the secret `EEC_CERT_PEM`, and the override still has to pass the chain check.
+The root private key lives in the offline environment of the DeepSeek-Chat-Enhanced repository; this repository and CI neither have nor need it. The committed `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` carries public material only and is issued by that root CA; CI can also override it with the secret `AWESOME_DSC_PLUGIN_EEC`, and the override still has to pass the chain check.
 
 ## Maintainer self-check scripts
 
@@ -461,7 +461,7 @@ pnpm install
 pnpm type            # syntax check: every script and site source parses
 pnpm verify:catalog  # repository check, reads catalog/ and certs/ only
 pnpm build:site      # build the site into site/dist; the output goes to the pages bundle root
-pnpm build           # needs EEC_SECRET_KEY and ROOT_CA_PATH: assemble dist/pages from catalog/
+pnpm build           # needs AWESOME_DSC_PLUGIN_EEC_SECRET and ROOT_CA_PATH: assemble dist/pages from catalog/
 pnpm verify:bundle --root-ca root_ca.crt   # pages bundle check
 ```
 
@@ -470,7 +470,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages bundle check
 - `pnpm build` is the same as calling `scripts/build-from-catalog.mjs`; the full local reproduction is:
 
   ```bash
-  EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
+  AWESOME_DSC_PLUGIN_EEC_SECRET=... ROOT_CA_PATH=root_ca.crt \
     node scripts/build-from-catalog.mjs \
     --catalog catalog --certs certs --site site/dist --out dist/pages \
     --ci-memory single-branch/ci-memory \
@@ -493,7 +493,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages bundle check
 
 - When a signature fails, the plugin market warns the user and suggests downloading again; it never runs silently.
 - Inclusion is not endorsement. A signature only proves that distributed content matches its signer, not that plugin behaviour was reviewed.
-- Keep private keys in CI secrets and local environment variables only. The EEC private key lives in `EEC_SECRET_KEY`; the root private key never enters this repository. `.gitignore` already excludes `.env`.
+- Keep private keys in CI secrets and local environment variables only. The EEC private key lives in `AWESOME_DSC_PLUGIN_EEC_SECRET`; the root private key never enters this repository. `.gitignore` already excludes `.env`.
 - Replacing the EEC key pair requires replacing `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` and requesting a new certificate from the DeepSeek-Chat-Enhanced repository; CMS signatures made with the old certificate stop verifying.
 - Manifest and artifact signatures cover file bytes. Any change to line endings, indentation or whitespace breaks verification, and the repository uses LF everywhere; author artifacts must be LF too.
 - Minifying the artifact is recommended: it shrinks the payload and avoids meaningless whitespace differences.
