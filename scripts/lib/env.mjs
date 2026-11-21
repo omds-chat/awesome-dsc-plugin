@@ -73,7 +73,7 @@ export function loadDotEnv(path = join(repoRoot, '.env')) {
 /**
  * 解析 npm registry 默认地址:命令行未给 --registry 时由各校验脚本调用。
  * 优先级:环境变量 NPM_REGISTRY_URL(含仓库根 .env)→ 官方源。
- * 离线联调时把它指到本地模拟器 scripts/dev/npm-registry-mock.mjs,
+ * 离线联调时把它指到本地模拟器(组织仓库 tools/dev-local-npmjs),
  * 校验的在线查询就走本地回环,不触外网。
  * @returns {string} registry 地址
  */
