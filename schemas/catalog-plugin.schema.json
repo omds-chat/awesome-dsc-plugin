@@ -40,6 +40,12 @@
         "type": "string",
         "minLength": 1
       }
+    },
+    "npm": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:dsc-[a-z0-9][a-z0-9._-]*|@[a-z0-9][a-z0-9._-]*/dsc-[a-z0-9][a-z0-9._-]*)$",
+      "description": "登记的 npm 包名,可省略,省略等价于与插件名同名。本合集收录要求插件已发布到 npm 且包名与插件名一致,登记包名与插件名不一致、或 registry 上查不到该包,仓库级校验与 CI 都会以错误拦截。"
     }
   },
   "required": [
@@ -57,7 +63,8 @@
       "license": "Apache-2.0",
       "repo_link": "https://github.com/omds-chat/dsc-plugin-gallery",
       "base_url": "https://omds-chat.github.io/dsc-plugin-gallery/",
-      "tags": ["ui-enhance"]
+      "tags": ["ui-enhance"],
+      "npm": "dsc-plugin-gallery"
     }
   ]
 }

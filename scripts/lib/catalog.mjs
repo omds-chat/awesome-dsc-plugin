@@ -42,8 +42,8 @@ export const AUTHOR_NAME_PATTERN = /^[a-z\d](?:[a-z\d]|-(?=[a-z\d])){0,38}$/i
 /** 作者名长度上限,与 GitHub 用户名规则一致 */
 export const AUTHOR_NAME_MAX_LENGTH = 39
 const PLUGIN_FIELDS = ['name', 'description', 'license', 'repo_link', 'base_url']
-/** plugin.json 的可选字段:省略等价于空数组 */
-const PLUGIN_OPTIONAL_FIELDS = ['tags']
+/** plugin.json 的可选字段:省略等价于空数组(npm 是登记的 npm 包名,省略等价于与插件名同名) */
+const PLUGIN_OPTIONAL_FIELDS = ['tags', 'npm']
 /** catalog 根目录允许出现的说明与登记文件,不按登记格式解析 */
 const CATALOG_ROOT_FILES = ['README.md', 'removed.json']
 
@@ -329,6 +329,18 @@ export function readCatalog({ catalogDir, problems, checkAuthorNames = true }) {
         problems.push(problem('error', 'PLUGIN_BASE_URL_INVALID', pluginRel + '/' + PLUGIN_FILE + ' 的 base_url 必须是 http(s) 绝对地址:' + JSON.stringify(data.base_url), pluginRel + '/' + PLUGIN_FILE))
         continue
       }
+      let npm
+      if (Object.prototype.hasOwnProperty.call(data, 'npm')) {
+        if (typeof data.npm !== 'string' || data.npm.length === 0 || data.npm !== data.npm.trim()) {
+          problems.push(problem('error', 'PLUGIN_FIELD_INVALID', pluginRel + '/' + PLUGIN_FILE + ' 的 npm 必须是非空且不含首尾空白的字符串:' + JSON.stringify(data.npm), pluginRel + '/' + PLUGIN_FILE))
+          valid = false
+        } else if (!PLUGIN_NAME_PATTERN.test(data.npm)) {
+          problems.push(problem('error', 'PLUGIN_FIELD_INVALID', pluginRel + '/' + PLUGIN_FILE + ' 的 npm ' + JSON.stringify(data.npm) + ' 不是合法 npm 包名:必须与插件名同形,写成 dsc-xxx 或 @scope/dsc-xxx', pluginRel + '/' + PLUGIN_FILE))
+          valid = false
+        } else {
+          npm = data.npm
+        }
+      }
       const tags = readPluginTags(data, pluginRel + '/' + PLUGIN_FILE, problems)
       if (tags === null) continue
       if (seenPlugins.has(data.name)) {
@@ -343,6 +355,7 @@ export function readCatalog({ catalogDir, problems, checkAuthorNames = true }) {
         repoLink: data.repo_link,
         baseUrl: data.base_url,
         tags,
+        npm,
         dirName,
         author: username,
         authorDir,

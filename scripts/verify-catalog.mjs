@@ -22,6 +22,7 @@
 import { join, resolve } from 'node:path'
 import { formatProblems } from './lib/collection-verify.mjs'
 import { readCatalog } from './lib/catalog.mjs'
+import { NPM_REGISTRY_URL, checkNpmPackages } from './lib/npm-package-check.mjs'
 import {
   checkAuthorNames,
   checkCerts,
@@ -41,6 +42,8 @@ function usage() {
     '  --certs <目录>     证书目录,默认 certs',
     '  --tags <文件>      预设标签来源,默认 site/tags.json',
     '  --root-ca <路径>   根证书路径,给出时校验合集证书的签发链',
+    '  --registry <地址>  npm registry 地址,默认 ' + NPM_REGISTRY_URL,
+    '  --skip-npm         跳过 npm 包名在线检查(本地无网时可不跳,检查会自行降级为警告)',
     '  --json             以 JSON 输出校验结果',
     '  --help             显示本说明',
     '',
@@ -56,6 +59,8 @@ function parseArgs(argv) {
     certs: 'certs',
     tags: join('site', 'tags.json'),
     rootCa: null,
+    registry: NPM_REGISTRY_URL,
+    skipNpm: false,
     json: false,
     help: false,
   }
@@ -76,6 +81,8 @@ function parseArgs(argv) {
       case '--certs': options.certs = take(); break
       case '--tags': options.tags = take(); break
       case '--root-ca': options.rootCa = take(); break
+      case '--registry': options.registry = take(); break
+      case '--skip-npm': options.skipNpm = true; break
       case '--json': options.json = true; break
       case '--help':
       case '-h': options.help = true; break
@@ -85,7 +92,7 @@ function parseArgs(argv) {
   return options
 }
 
-function main() {
+async function main() {
   let options
   try {
     options = parseArgs(process.argv.slice(2))
@@ -125,6 +132,14 @@ function main() {
   const removedCount = checkRemoved({ catalogDir, plugins: catalog.plugins, problems })
   const leftovers = checkPluginDirectories(catalog.plugins, problems)
   const certStats = checkCerts({ certsDir, rootCaPath, problems })
+  // npm 包名强校验:登记包名必须与插件名一致,且 registry 上存在。
+  // 本地无网时 registry 查询降级为「跳过在线检查」警告,不阻断;CI 联网时查不到包按错误拦截。
+  const npmStats = await checkNpmPackages({
+    plugins: catalog.plugins,
+    problems,
+    registryUrl: options.registry,
+    skip: options.skipNpm,
+  })
 
   const errors = problems.filter((item) => item.level === 'error')
   const warnings = problems.filter((item) => item.level === 'warning')
@@ -145,6 +160,7 @@ function main() {
           removed: removedCount,
           versionDirWarnings: leftovers,
           certs: certStats,
+          npm: npmStats,
           problems,
         },
         null,
@@ -153,12 +169,19 @@ function main() {
     )
   } else {
     if (problems.length > 0) process.stdout.write(formatProblems(problems) + '\n')
+    const npmSummary = options.skipNpm
+      ? ',npm 包名检查已跳过'
+      : ',npm 包名检查 ' + npmStats.registered + ' 个' +
+        (npmStats.offlineSkipped > 0 ? '(registry 不可达,跳过 ' + npmStats.offlineSkipped + ' 个在线查询)' : '') +
+        (npmStats.mismatched > 0 ? ',包名不一致 ' + npmStats.mismatched + ' 个' : '') +
+        (npmStats.missing > 0 ? ',包不存在 ' + npmStats.missing + ' 个' : '')
     const summary =
       'catalog 作者 ' + catalog.authors.length + ' 个,' +
       '插件 ' + catalog.plugins.length + ' 个,' +
       'removed.json 记录 ' + removedCount + ' 条,' +
       'certs/ 证书 ' + (certStats.eecCert ? '1 份' : '0 份') +
-      (certStats.chainChecked ? '(已校验签发链)' : '')
+      (certStats.chainChecked ? '(已校验签发链)' : '') +
+      npmSummary
     if (errors.length === 0) {
       process.stdout.write('catalog 校验通过 ' + summary + ',警告 ' + warnings.length + ' 条\n')
     } else {
@@ -169,9 +192,12 @@ function main() {
   return errors.length === 0 ? 0 : 1
 }
 
-try {
-  process.exitCode = main()
-} catch (error) {
-  process.stderr.write('校验失败:' + (error && error.message ? error.message : String(error)) + '\n')
-  process.exitCode = 1
-}
+main().then(
+  (code) => {
+    process.exitCode = code
+  },
+  (error) => {
+    process.stderr.write('校验失败:' + (error && error.message ? error.message : String(error)) + '\n')
+    process.exitCode = 1
+  },
+)

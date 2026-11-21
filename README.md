@@ -13,6 +13,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 - 插件产物是单个浏览器 ESM 脚本,导出 `activate(context)`,不依赖 Node 内置模块与后端接口。
 - 提供可构建的源码仓库或可访问的产物地址,CI 能按 `base_url` 拉取并复核产物。
 - 插件运行时元数据 `meta.json` 字段完整,插件名符合 `dsc-xxx` 或 `@scope/dsc-xxx`。
+- 插件必须先发布到 npm,且 npm 包名与插件名一致:`dsc-xxx` 对应 npm 包 `dsc-xxx`,`@scope/dsc-xxx` 对应 `@scope/dsc-xxx`。仓库级校验 `pnpm verify:catalog`、PR 触发的 preflight 预检作业与 Release CI 都会查询 npm registry,包不存在或登记包名与插件名不一致都以错误拦截,PR 与 CI 双重拦截,没有发布就不会被收录。
 
 不收录需要后端服务、需要原生模块、或无法在 CI 中重建产物的插件。
 
@@ -342,6 +343,8 @@ awesome-dsc-plugin/
 │   ├── lib/catalog-index.mjs           生成 catalog/index.json 与 catalog/anomalies.json
 │   ├── lib/layer-manifests.mjs         按层生成并签名三层清单
 │   ├── lib/catalog-checks.mjs          catalog/ 与 certs/ 的仓库级检查
+│   ├── lib/npm-package-check.mjs       npm 包名强校验:登记包名与插件名一致且 registry 上存在
+│   ├── lib/preflight-comment.mjs       预检报告的 PR 评论文本生成(固定标记在脚本内)
 │   ├── lib/consistency-verify.mjs      pages 包的收录信息交叉校验
 │   ├── lib/collection-meta.mjs         合集元数据 site/meta.json 的规则
 │   ├── lib/check-suite.mjs             自查检查项定义,复用上述模块
@@ -355,6 +358,7 @@ awesome-dsc-plugin/
 │   ├── report-build-anomalies.mjs      把剔除的插件上报到本仓库 Issue,失败不阻塞发布
 │   ├── check-*.mjs                     维护者自查脚本:七个检查项各一个入口,详见「维护者自查脚本」
 │   ├── check-all.mjs                   自查汇总入口:一次跑完全部检查,输出一个总 JSON
+│   ├── preflight.mjs                   发版前预检:一次跑完 catalog、清单、签名占位、npm 包名与产物扫描
 │   └── summarize.mjs                   把管道传入的多个检查结果合并成一个总 JSON
 └── site/                               合集设置与静态展示站点工程,构建产物进入 pages 包根目录
     ├── README.md                       站点说明:数据来源、构建与产物
@@ -453,13 +457,15 @@ catalog/<作者>/
 
 | 命令 | 校验对象 | 何时运行 |
 |:---:|:---:|:---:|
-| `pnpm verify:catalog` | `catalog/` 与 `certs/` 的结构、字段、公钥格式、标签取值与合集证书材料 | 提交登记 PR 前,不需要任何构建产物;`pnpm verify` 与它等价 |
+| `pnpm verify:catalog` | `catalog/` 与 `certs/` 的结构、字段、公钥格式、标签取值、npm 包名一致性(查询 registry)与合集证书材料 | 提交登记 PR 前,不需要任何构建产物;`pnpm verify` 与它等价 |
 | `pnpm verify:bundle` | 构建出的 pages 包:三层清单、清单签名、产物签名与收录信息交叉一致性 | 构建之后、发布之前,需要 `dist/pages` 已存在 |
+| `node scripts/preflight.mjs` | 发版前预检:catalog 登记、certs、npm 包名、三层清单与签名占位、产物扫描,汇总输出 | 提 PR 前自查,也是 CI PR 预检作业跑的同一份脚本;不联网时 npm 检查自动降级为「跳过在线检查」警告 |
 
 ```bash
 pnpm install
 pnpm type            # 语法自检:全部脚本与站点源码都能被 Node 解析
-pnpm verify:catalog  # 仓库级校验,只读 catalog/ 与 certs/
+pnpm verify:catalog  # 仓库级校验,只读 catalog/ 与 certs/,含 npm 包名在线检查
+node scripts/preflight.mjs  # 发版前预检,PR 预检作业跑的同一份脚本
 pnpm build:site      # 构建站点到 site/dist,产物进入 pages 包根目录
 pnpm build           # 需要 AWESOME_DSC_PLUGIN_EEC_SECRET 与 ROOT_CA_PATH:按 catalog 组装 pages 包到 dist/pages
 pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验

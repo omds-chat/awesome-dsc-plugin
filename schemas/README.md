@@ -7,7 +7,7 @@
 | [manifest.schema.json](manifest.schema.json) | 三层哈希清单 `manifest.json` | `schemaVersion`、`revision`、`files` 三项;`path` 相对清单所在目录,正斜杠;`sha512` 为 128 位小写十六进制 |
 | [plugins.schema.json](plugins.schema.json) | pages 包根目录的插件目录索引 `plugins.json` | 顶层数组;每条含 `plugin_name`、`author`、`tag`,不接受额外字段;与同目录的 `plugins/` 插件树成对 |
 | [catalog-author.schema.json](catalog-author.schema.json) | `catalog/<作者>/author.json` | `username` 与 `profile` 必填、非空;`username` 符合 GitHub 用户名规则(字母、数字与连字符,首尾不是连字符,长度 1 到 39);不接受额外字段 |
-| [catalog-plugin.schema.json](catalog-plugin.schema.json) | `catalog/<作者>/<插件>/plugin.json` | `name`、`description`、`license`、`repo_link`、`base_url` 五个字段必填;`name` 必须以 `dsc-` 为前缀,写成 `dsc-xxx` 或 `@scope/dsc-xxx`;`tags` 可选,字符串数组、元素非空且不重复;`base_url` 为 http 或 https 开头的绝对地址且以斜杠结尾 |
+| [catalog-plugin.schema.json](catalog-plugin.schema.json) | `catalog/<作者>/<插件>/plugin.json` | `name`、`description`、`license`、`repo_link`、`base_url` 五个字段必填;`name` 必须以 `dsc-` 为前缀,写成 `dsc-xxx` 或 `@scope/dsc-xxx`;`tags` 可选,字符串数组、元素非空且不重复;`npm` 可选,登记的 npm 包名,收录要求包名与插件名一致且 registry 上存在;`base_url` 为 http 或 https 开头的绝对地址且以斜杠结尾 |
 | [catalog-removed.schema.json](catalog-removed.schema.json) | `catalog/removed.json` | 已解除托管的插件清单;`name`、`base_url`、`removed_in` 必填,`note` 可选;不接受额外字段 |
 | [catalog-index.schema.json](catalog-index.schema.json) | pages 包 `catalog/index.json` | 构建生成的汇总索引:作者列表含 `username`、`profile`、`plugin_count` 与内嵌插件登记;插件列表含作者、名称、描述、许可证、仓库链接、当前版本、标签与版本数。只供本站展示,不作为市场省请求的入口 |
 

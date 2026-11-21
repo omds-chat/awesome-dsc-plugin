@@ -13,6 +13,7 @@ Inclusion criteria:
 - The artifact is a single browser ESM script that exports `activate(context)` and depends on no Node built-in module and no backend endpoint.
 - A buildable source repository or a reachable artifact URL is provided, and CI can fetch and reproduce the artifact from `base_url`.
 - The runtime metadata `meta.json` is complete and the plugin name matches `dsc-xxx` or `@scope/dsc-xxx`.
+- The plugin must be published to npm first, and the npm package name must equal the plugin name: `dsc-xxx` maps to the npm package `dsc-xxx`, and `@scope/dsc-xxx` maps to `@scope/dsc-xxx`. The repository check `pnpm verify:catalog`, the preflight job on PRs and the Release CI all query the npm registry; a missing package or a registered package name that differs from the plugin name is rejected as an error. PR review and CI both block it — without the npm release the plugin is not accepted.
 
 Plugins that need a backend service, a native module, or an artifact that cannot be rebuilt in CI are not accepted.
 
@@ -342,6 +343,8 @@ awesome-dsc-plugin/
 │   ├── lib/catalog-index.mjs           generates catalog/index.json and catalog/anomalies.json
 │   ├── lib/layer-manifests.mjs         generates and signs the three manifests layer by layer
 │   ├── lib/catalog-checks.mjs          repository checks for catalog/ and certs/
+│   ├── lib/npm-package-check.mjs       strict npm package name check: registered name equals plugin name and exists on the registry
+│   ├── lib/preflight-comment.mjs       renders the preflight report as the PR comment (fixed marker inside)
 │   ├── lib/consistency-verify.mjs      cross-checks the collected information of a pages bundle
 │   ├── lib/collection-meta.mjs         rules for the collection metadata site/meta.json
 │   ├── lib/check-suite.mjs             self-check definitions, reusing the modules above
@@ -355,6 +358,7 @@ awesome-dsc-plugin/
 │   ├── report-build-anomalies.mjs      reports excluded plugins as an issue, never blocks the release
 │   ├── check-*.mjs                     maintainer self-check scripts, one entry per check
 │   ├── check-all.mjs                   combined self-check entry: every check, one combined JSON
+│   ├── preflight.mjs                   preflight: catalog, manifests, signature placeholders, npm package names and artifact scan in one run
 │   └── summarize.mjs                   merges several self-check results into one combined JSON
 └── site/                               collection settings and showcase site project; its output goes to the bundle root
     ├── README.md                       site notes: data sources, build and output
@@ -453,13 +457,15 @@ The two checks look at different things.
 
 | Command | Target | When to run |
 |:---:|:---:|:---:|
-| `pnpm verify:catalog` | structure, fields, public key format, tag values and certificate material of `catalog/` and `certs/` | before opening a registration PR; needs no build output; `pnpm verify` is an alias |
+| `pnpm verify:catalog` | structure, fields, public key format, tag values, npm package name consistency (registry query) and certificate material of `catalog/` and `certs/` | before opening a registration PR; needs no build output; `pnpm verify` is an alias |
 | `pnpm verify:bundle` | the built pages bundle: three manifests, manifest signatures, artifact signatures and cross-consistency | after a build and before publishing; needs `dist/pages` |
+| `node scripts/preflight.mjs` | preflight: catalog registrations, certs, npm package names, the three manifests with signature placeholders and the artifact scan, aggregated in one report | before opening a PR; the same script the CI preflight job runs; offline, the npm check downgrades to a "skip online check" warning |
 
 ```bash
 pnpm install
 pnpm type            # syntax check: every script and site source parses
-pnpm verify:catalog  # repository check, reads catalog/ and certs/ only
+pnpm verify:catalog  # repository check, reads catalog/ and certs/ only, includes the npm name check
+node scripts/preflight.mjs  # preflight, the same script the PR preflight job runs
 pnpm build:site      # build the site into site/dist; the output goes to the pages bundle root
 pnpm build           # needs AWESOME_DSC_PLUGIN_EEC_SECRET and ROOT_CA_PATH: assemble dist/pages from catalog/
 pnpm verify:bundle --root-ca root_ca.crt   # pages bundle check

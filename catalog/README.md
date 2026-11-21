@@ -68,6 +68,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 | `repo_link` | string | 必填,非空。插件源码仓库地址,写完整绝对地址 |
 | `base_url` | string | 必填,非空。插件自己发布的站点基址,`http` 或 `https` 开头的绝对地址,必须以斜杠结尾 |
 | `tags` | string[] | 可选,省略等价于空数组。标签数组,元素非空、互不重复,取值必须来自下文「预设标签」 |
+| `npm` | string | 可选,省略等价于与插件名同名。登记的 npm 包名;收录要求插件已发布到 npm 且包名与插件名一致,登记包名与插件名不一致、或 registry 上查不到该包,仓库级校验与 CI 都会以错误拦截 |
 
 ```json
 {
@@ -76,12 +77,14 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
   "license": "Apache-2.0",
   "repo_link": "https://github.com/omds-chat/dsc-plugin-gallery",
   "base_url": "https://omds-chat.github.io/dsc-plugin-gallery/",
-  "tags": ["ui-enhance"]
+  "tags": ["ui-enhance"],
+  "npm": "dsc-plugin-gallery"
 }
 ```
 
-- 前五个字段必填,`tags` 可选,多写字段会被拒绝,结构以 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 为准。
+- 前五个字段必填,`tags` 与 `npm` 可选,多写其余字段会被拒绝,结构以 [catalog-plugin.schema.json](../schemas/catalog-plugin.schema.json) 为准。
 - `base_url` 只写站点根,不写具体文件,不带查询串或锚点;少写结尾斜杠会被拒绝。
+- npm 包名必须与插件名一致并已发布到 npm:本地无网时在线检查输出「跳过在线检查」警告,CI 联网时查不到包按错误拦截,PR 评审与 CI 双重把关,没有发布就不会被收录。
 
 ## 预设标签
 
