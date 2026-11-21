@@ -497,7 +497,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 
 ### 离线联调 npm 校验
 
-`scripts/dev/npm-registry-mock.mjs` 是本地 npm registry 模拟器:零依赖 Node http 服务,只模拟包的发布登记(PUT)与元数据查询(GET),不实现 tarball,也不实现 npm 生态的认证。它是联调用具,不是 registry 实现;数据存仓库根 `packages/` 目录(`.gitignore` 已排除)。端口默认 61123(61117-61122 已被其他联调服务占用),`--port` 可调,只监听本地回环 `127.0.0.1`。
+`组织仓库的 tools/npm-registry-mock/npm-registry-mock.mjs` 是本地 npm registry 模拟器:零依赖 Node http 服务,只模拟包的发布登记(PUT)与元数据查询(GET),不实现 tarball,也不实现 npm 生态的认证。它是联调用具,不是 registry 实现;数据存仓库根 `packages/` 目录(`.gitignore` 已排除)。端口默认 61123(61117-61122 已被其他联调服务占用),`--port` 可调,只监听本地回环 `127.0.0.1`。
 
 `verify-catalog`、`verify-collection`、`preflight` 的 `--registry` 默认值按「命令行 `--registry` → 环境变量 `NPM_REGISTRY_URL`(含仓库根 `.env`)→ 官方源」取值。`.env` 模板见 `.env.example`,登记 `NPM_REGISTRY_URL=http://127.0.0.1:61123/` 后校验的在线查询走本地回环,不触外网;留空或删除该条则回落官方源。
 
@@ -512,7 +512,7 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 
 ```bash
 # 1. 起模拟器(前台运行,Ctrl+C 停止)
-node scripts/dev/npm-registry-mock.mjs
+node 组织仓库的 tools/npm-registry-mock/npm-registry-mock.mjs
 
 # 2. 发布两个模拟包(shasum 缺省时由模拟器按包名与版本计算)
 curl -X PUT http://127.0.0.1:61123/dsc-demo-alpha -d '{"version":"1.0.0"}'
