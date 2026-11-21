@@ -22,13 +22,13 @@ concurrency:
   cancel-in-progress: false
 
 # 私钥只有两个来源:
-#   secrets.EEC_SECRET_KEY  终端签名证书私钥(ECDSA P-256),只在本流程内存与临时目录中出现;
+#   secrets.AWESOME_DSC_PLUGIN_EEC_SECRET  终端签名证书私钥(ECDSA P-256),只在本流程内存与临时目录中出现;
 #   secrets.ROOT_CA_PEM     根证书 PEM,用于校验证书链与全部 CMS 签名,不是私钥。
 # 根证书私钥属于 DeepSeek-Chat-Enhanced 仓库的离线环境,绝不出现在本流程。
 # 合集证书的固定位置是 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt;pages 根目录不放 eec.pem。
 env:
-  EEC_SECRET_KEY: ${{ secrets.EEC_SECRET_KEY }}
-  EEC_CERT_PEM: ${{ secrets.EEC_CERT_PEM }}
+  EEC_SECRET_KEY: ${{ secrets.AWESOME_DSC_PLUGIN_EEC_SECRET }}
+  EEC_CERT_PEM: ${{ secrets.AWESOME_DSC_PLUGIN_EEC }}
   ROOT_CA_PEM: ${{ secrets.ROOT_CA_PEM }}
   ROOT_CA_URL: ${{ vars.ROOT_CA_URL }}
   SITE_DIR: ${{ vars.SITE_DIR }}
@@ -92,14 +92,14 @@ jobs:
           echo "ROOT_CA_PATH=$target" >> "$GITHUB_ENV"
 
       # 证书与私钥都从 secrets 注入:私钥只在签名时使用;
-      # 证书默认用 main 分支的 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt,提供 secrets.EEC_CERT_PEM 时以 secret 为准。
+      # 证书默认用 main 分支的 certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt,提供 secrets.AWESOME_DSC_PLUGIN_EEC 时以 secret 为准。
       - name: Install EEC certificate
         run: |
           set -euo pipefail
           target="certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt"
           if [ -n "${EEC_CERT_PEM:-}" ]; then
             printf '%s\n' "$EEC_CERT_PEM" > "$target"
-            echo "终端签名证书来源: secrets.EEC_CERT_PEM"
+            echo "终端签名证书来源: secrets.AWESOME_DSC_PLUGIN_EEC"
           else
             echo "终端签名证书来源: $target"
           fi
