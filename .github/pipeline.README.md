@@ -84,7 +84,7 @@ EEC_SECRET_KEY=... ROOT_CA_PATH=root_ca.crt \
   --catalog catalog --certs certs --site site/dist --out dist/pages \
   --published-base https://omds-chat.github.io/awesome-dsc-plugin/
 
-# pages 包校验:三层清单、清单签名、产物签名与收录信息交叉一致性
+# pages 包校验:三层清单、清单签名、产物签名、产物网络扫描与收录信息交叉一致性
 pnpm verify:bundle --root-ca root_ca.crt
 
 # 独立验签
@@ -93,7 +93,7 @@ openssl cms -verify -binary -md sha512 -inform DER \
   -CAfile root_ca.crt -certfile dist/pages/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt
 ```
 
-流水线步骤依次为:安装依赖、仓库级校验(`verify:catalog`)、构建 site、拉取插件、用 EEC 重新签名 `plugin.js`、生成并签名三层清单、
+流水线步骤依次为:安装依赖、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中即剔除该插件)、用 EEC 重新签名 `plugin.js`、生成并签名三层清单、
 组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、上报剔除项、上传并部署。
 
 ## 七、异常插件与上报

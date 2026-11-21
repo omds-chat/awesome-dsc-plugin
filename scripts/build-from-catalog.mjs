@@ -34,7 +34,8 @@
  *   登记不合规   catalog 里的文件本身不合法(缺字段、name 与目录不符、tags 结构或取值不合规等)。
  *                这是作者需要修正的登记错误,构建以非零退出码中止,一个插件都不发布。
  *   运行期异常   作者站点拉取失败(网络、HTTP 4xx/5xx)、远端 versions.json 不合法、
- *                远端 meta.json 与登记不符、plugin.js 为空等。只剔除该插件,其余插件照常构建与发布;
+ *                远端 meta.json 与登记不符、plugin.js 为空、plugin.js 命中网络自建调用等。
+ *                只剔除该插件,其余插件照常构建与发布;
  *                剔除项写入 catalog/anomalies.json,由 scripts/report-build-anomalies.mjs 上报到仓库 Issue。
  *   签名失败、清单生成失败、分发自检失败既不是登记错误也不是单个插件的问题,仍按构建失败处理。
  *   作者签名是另一类:它是可选证据,拉取失败、为空或验签失败都只记警告,从不剔除插件、也不让构建失败。
@@ -63,6 +64,7 @@ import { formatProblems, verifyCollection } from './lib/collection-verify.mjs'
 import { buildLayerManifests, listLayerDirs, problem } from './lib/layer-manifests.mjs'
 import { buildAnomalyReport, buildCatalogIndex } from './lib/catalog-index.mjs'
 import { readCollectionMeta } from './lib/collection-meta.mjs'
+import { scanPluginSource, summarizeNetworkHits } from './lib/plugin-network-scan.mjs'
 import {
   EEC_CERT_REL_IN_CERTS,
   EEC_CERT_RELATIVE,
@@ -404,6 +406,16 @@ async function pullPlugin(plugin, { timeoutMs }) {
     }
     if (!payload.pluginJs || payload.pluginJs.length === 0) {
       throw new StageError('bundle', version + ' 的 plugin.js 为空')
+    }
+    // 收录侧门禁:插件不得自建网络通道。命中即剔除该插件,作者改用 context.net 后重新发布即可回到分发内容
+    const scan = scanPluginSource(payload.pluginJs.toString('utf8'), {
+      relative: 'plugins/' + plugin.author + '/' + plugin.dirName + '/' + version + '/plugin.js',
+    })
+    if (scan.total > 0) {
+      throw new StageError(
+        'network',
+        version + ' 的 plugin.js 命中网络自建调用:' + summarizeNetworkHits(scan.hits) + ';插件不得自建网络通道,请改用宿主提供的 context.net',
+      )
     }
     releases.push({ version, meta, pluginJs: payload.pluginJs, authorSig: payload.authorSig, authorSigNote: payload.authorSigNote })
   }

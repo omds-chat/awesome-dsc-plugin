@@ -47,7 +47,7 @@
 | 文件 | 必需 | 签名者 | 说明 |
 |:---:|:---:|:---:|:---:|
 | `meta.json` | 是 | 无 | 插件运行时元数据,由 L3 清单覆盖,不再单独签名 |
-| `plugin.js` | 是 | 无 | 插件运行时脚本,单文件 ESM,使用 LF 换行 |
+| `plugin.js` | 是 | 无 | 插件运行时脚本,单文件 ESM,使用 LF 换行。收录前做网络自建静态扫描,出现全局 `fetch(`、`XMLHttpRequest`、`WebSocket`、`EventSource`、`navigator.sendBeacon` 或 `import()` 远程地址即报 `PLUGIN_NETWORK_SELFTALK` |
 | `plugin.js.sig` | 是 | 本仓库 EEC | `plugin.js` 的 CMS 分离签名,由 CI 的 `build-from-catalog.mjs` 重新生成 |
 | `plugin.js.author.sig` | 否 | 插件作者 | `plugin.js` 的裸公钥分离签名,随插件产物提供。与 `plugins/<author>/author_pub.pem` 配对:两侧齐全才用 `openssl pkeyutl -verify` 校验,验签失败只警告;只有一侧时判为未校验 |
 

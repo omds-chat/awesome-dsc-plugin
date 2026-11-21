@@ -33,6 +33,7 @@ const STAGE_LABELS = {
   version: '版本产物拉取',
   meta: 'meta.json 校验',
   bundle: 'plugin.js 校验',
+  network: '产物网络自审',
   'author-signature': '作者签名校验',
 }
 

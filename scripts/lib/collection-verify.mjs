@@ -2,7 +2,8 @@
  * 合集自洽性校验(PKI 版)。
  *
  * 校验对象是分发规范 v2 的合集目录结构:根目录的终端签名证书、三层哈希清单、
- * 作者公钥、插件清单、版本目录与逐文件 CMS 签名。只读取文件,不修改任何内容;
+ * 作者公钥、插件清单、版本目录、逐文件 CMS 签名,以及 plugin.js 的网络自建静态扫描。
+ * 只读取文件,不修改任何内容;
  * build-collection.mjs 与 verify-collection.mjs 共用本模块。
  *
  * 三层清单互相独立,不做收束:L1 在合集根,L2 在每个作者目录,L3 在每个插件目录,
@@ -31,6 +32,7 @@ import {
   verifyFileAuthor,
   verifyFileCms,
 } from '../pki.mjs'
+import { PLUGIN_NETWORK_SELFTALK, describeNetworkHit, scanPluginFile } from './plugin-network-scan.mjs'
 
 /**
  * 合集根目录必需的文件。tags.json 可选,存在时才要求被 L1 清单覆盖。
@@ -56,6 +58,9 @@ export const LAYER1_OPTIONAL_FILES = ['tags.json']
 export const LAYER2_FILES = ['author_pub.pem', 'plugin_manifest.json']
 /** L3 固定覆盖的文件,相对插件目录;其余覆盖项是每个版本的 meta.json */
 export const LAYER3_FILES = ['versions.json']
+/** 单个 plugin.js 逐条报出的网络自建命中上限,超出部分汇总成一条 */
+export const MAX_NETWORK_HITS = 20
+
 /** L3 明确不覆盖的产物本体,由每版本的 plugin.js.sig 独立签名 */
 export const LAYER3_EXCLUDED_FILES = ['plugin.js', 'plugin.js.sig']
 
@@ -409,6 +414,7 @@ export function verifyCollection(collectionDir, options = {}) {
     versions: 0,
     manifests: [],
     authorSignatures: { verified: 0, failed: 0, unpaired: 0, unsigned: 0, absent: 0 },
+    networkHits: 0,
   }
   const report = {
     error(code, message, path) {
@@ -748,6 +754,7 @@ function inspectPlugin({ authorContext, entry, report, stats, rootCaPath, eecPat
       }
     }
     inspectVersionMeta({ versionDir, versionRel, version, pluginName: entry.plugin_name, report })
+    inspectVersionNetwork({ versionDir, versionRel, report, stats })
     authorSignatures.push(
       inspectVersionSignatures({
         version,
@@ -782,6 +789,47 @@ function inspectVersionMeta({ versionDir, versionRel, version, pluginName, repor
   }
   if (meta.version !== version) {
     report.error('PLUGIN_META_MISMATCH', versionRel + '/meta.json 的 version 为 ' + JSON.stringify(meta.version) + ',与目录名 ' + version + ' 不一致', versionRel + '/meta.json')
+  }
+}
+
+/**
+ * 静态扫描一个版本的 plugin.js:插件不得自建网络通道。
+ *
+ * 只读产物文本,不做运行时拦截;命中一条报一条,每条都带命中的字面量与行列位置。
+ * 插件转发或包装 context.net 不受影响,判定口径见 lib/plugin-network-scan.mjs。
+ * 单个文件最多逐条报 MAX_NETWORK_HITS 条,其余汇总成一条,避免问题列表被同一个文件刷屏。
+ * @param {object} context 上下文
+ * @param {string} context.versionDir 版本目录
+ * @param {string} context.versionRel 版本目录的相对路径
+ * @param {object} context.report 问题收集器
+ * @param {object} context.stats 统计对象
+ */
+function inspectVersionNetwork({ versionDir, versionRel, report, stats }) {
+  const jsPath = join(versionDir, 'plugin.js')
+  if (!isFile(jsPath)) return
+  const rel = versionRel + '/plugin.js'
+  let scan
+  try {
+    scan = scanPluginFile(jsPath, { relative: rel })
+  } catch (error) {
+    report.error('PLUGIN_SCAN_FAILED', rel + ' 读取失败,无法做网络自建扫描:' + error.message, rel)
+    return
+  }
+  if (scan.total === 0) return
+  stats.networkHits += scan.total
+  for (const hit of scan.hits.slice(0, MAX_NETWORK_HITS)) {
+    report.error(
+      PLUGIN_NETWORK_SELFTALK,
+      rel + ' ' + describeNetworkHit(hit) + ':插件不得自建网络通道,请改用宿主提供的 context.net;若为误伤,请在注释中说明或改写调用',
+      rel,
+    )
+  }
+  if (scan.total > MAX_NETWORK_HITS) {
+    report.error(
+      PLUGIN_NETWORK_SELFTALK,
+      rel + ' 另有 ' + (scan.total - MAX_NETWORK_HITS) + ' 处网络自建调用未逐条列出,合计 ' + scan.total + ' 处',
+      rel,
+    )
   }
 }
 
