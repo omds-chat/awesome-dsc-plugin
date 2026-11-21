@@ -365,7 +365,7 @@ awesome-dsc-plugin/
     └── src/                            站点源码:index.html 与 assets/
 ```
 
-仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与工程文件;`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库;`single-branch/` 存放 `ci-memory` 分支的本地工作区,同样不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omds-chat/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
+仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与工程文件;`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库;`single-branch/` 存放 `ci-memory` 分支的本地工作区,同样不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [dsc-plugin-set-template](https://github.com/omds-chat/dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
 
 ## 合集元数据
 

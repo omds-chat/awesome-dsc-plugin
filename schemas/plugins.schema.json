@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://omds-chat.github.io/awesome-dsc-plugin-set-template/schemas/plugins.schema.json",
+  "$id": "https://omds-chat.github.io/dsc-plugin-set-template/schemas/plugins.schema.json",
   "title": "dsc-plugin-collection-plugins-index",
   "description": "合集 pages 包的插件目录索引 plugins.json。顶层是数组,每个插件一条记录,与同一目录下的 plugins/ 插件树成对;由 scripts/build-from-catalog.mjs 生成,只收录本次发布实际入库的插件,被剔除的插件不出现在这里。",
   "type": "array",
