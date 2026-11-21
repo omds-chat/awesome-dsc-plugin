@@ -497,9 +497,9 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 
 ### 离线联调 npm 校验
 
-`组织仓库的 tools/npm-registry-mock/npm-registry-mock.mjs` 是本地 npm registry 模拟器:零依赖 Node http 服务,只模拟包的发布登记(PUT)与元数据查询(GET),不实现 tarball,也不实现 npm 生态的认证。它是联调用具,不是 registry 实现;数据存仓库根 `packages/` 目录(`.gitignore` 已排除)。端口默认 61123(61117-61122 已被其他联调服务占用),`--port` 可调,只监听本地回环 `127.0.0.1`。
+`组织仓库的 tools/dev-local-npmjs/dev-local-npmjs.mjs` 是本地 npm registry 模拟器:零依赖 Node http 服务,只模拟包的发布登记(PUT)与元数据查询(GET),不实现 tarball,也不实现 npm 生态的认证。它是联调用具,不是 registry 实现;数据存仓库根 `packages/` 目录(`.gitignore` 已排除)。端口默认 61116(61117-61122 已被其他联调服务占用),`--port` 可调,只监听本地回环 `127.0.0.1`。
 
-`verify-catalog`、`verify-collection`、`preflight` 的 `--registry` 默认值按「命令行 `--registry` → 环境变量 `NPM_REGISTRY_URL`(含仓库根 `.env`)→ 官方源」取值。`.env` 模板见 `.env.example`,登记 `NPM_REGISTRY_URL=http://127.0.0.1:61123/` 后校验的在线查询走本地回环,不触外网;留空或删除该条则回落官方源。
+`verify-catalog`、`verify-collection`、`preflight` 的 `--registry` 默认值按「命令行 `--registry` → 环境变量 `NPM_REGISTRY_URL`(含仓库根 `.env`)→ 官方源」取值。`.env` 模板见 `.env.example`,登记 `NPM_REGISTRY_URL=http://127.0.0.1:61116/` 后校验的在线查询走本地回环,不触外网;留空或删除该条则回落官方源。
 
 收录时序两种场景的预期结果:
 
@@ -512,21 +512,21 @@ pnpm verify:bundle --root-ca root_ca.crt   # pages 包校验
 
 ```bash
 # 1. 起模拟器(前台运行,Ctrl+C 停止)
-node 组织仓库的 tools/npm-registry-mock/npm-registry-mock.mjs
+node 组织仓库的 tools/dev-local-npmjs/dev-local-npmjs.mjs
 
 # 2. 发布两个模拟包(shasum 缺省时由模拟器按包名与版本计算)
-curl -X PUT http://127.0.0.1:61123/dsc-demo-alpha -d '{"version":"1.0.0"}'
-curl -X PUT http://127.0.0.1:61123/dsc-demo-beta -d '{"version":"0.1.0"}'
+curl -X PUT http://127.0.0.1:61116/dsc-demo-alpha -d '{"version":"1.0.0"}'
+curl -X PUT http://127.0.0.1:61116/dsc-demo-beta -d '{"version":"0.1.0"}'
 
 # 3. 跑仓库级校验:登记包存在且与插件名一致,catalog 校验通过
-node scripts/verify-catalog.mjs --registry http://127.0.0.1:61123/
+node scripts/verify-catalog.mjs --registry http://127.0.0.1:61116/
 
 # 4. 模拟下架一个包,再跑校验:该包报 NPM_PACKAGE_NOT_FOUND
-curl -X DELETE http://127.0.0.1:61123/dsc-demo-alpha/1.0.0
-node scripts/verify-catalog.mjs --registry http://127.0.0.1:61123/
+curl -X DELETE http://127.0.0.1:61116/dsc-demo-alpha/1.0.0
+node scripts/verify-catalog.mjs --registry http://127.0.0.1:61116/
 
 # 5. 不改 .env 时,用环境变量覆盖官方源(与 --registry 等价)
-NPM_REGISTRY_URL=http://127.0.0.1:61123/ node scripts/verify-catalog.mjs
+NPM_REGISTRY_URL=http://127.0.0.1:61116/ node scripts/verify-catalog.mjs
 ```
 
 不联网且不起模拟器时,校验对「registry 不可达」降级为「跳过在线检查」警告(NPM_CHECK_OFFLINE),不把网络故障当登记错误;CI 联网时查不到包按错误拦截。
