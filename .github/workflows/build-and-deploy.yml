@@ -98,7 +98,7 @@ jobs:
           set -euo pipefail
           target="certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt"
           if [ -n "${AWESOME_DSC_PLUGIN_EEC:-}" ]; then
-            printf '%s\n' "$EEC_CERT_PEM" > "$target"
+            printf '%s\n' "$AWESOME_DSC_PLUGIN_EEC" > "$target"
             echo "终端签名证书来源: secrets.AWESOME_DSC_PLUGIN_EEC"
           else
             echo "终端签名证书来源: $target"
