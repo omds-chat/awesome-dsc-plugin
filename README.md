@@ -80,14 +80,14 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 
 - `path` 相对清单所在目录,使用正斜杠,不得是绝对路径,不得出现 `.` 或 `..` 段,不得指向清单自身,不得重复。
 - 哈希算法 SHA-512,十六进制小写,固定 128 位。
-- `revision` 是每层独立的正整数:该层文件集合或内容变化时加一,不变时沿用旧值;pages 包每次全量重建,上一份值按层从已发布站点的同名 `manifest.json` 读取,取不到时从 1 开始。
+- `revision` 是每层独立的正整数:该层文件集合或内容变化时加一,不变时沿用旧值;pages 包每次全量重建,上一份值按层从已发布站点的同名 `manifest.json` 读取,取不到时从 1 开始。三层清单在发布前写回 `ci-memory` 分支的 `layer-manifests/`,路径与分发目录一一镜像,清单与同名 `.sig` 成对保存;写回失败即中止本次发布,CI 报错,不沿用旧 `revision` 继续发布。读回来源将由已发布站点改为 `ci-memory`,属下一步实现。
 - L3 不覆盖 `plugin.js` 与 `plugin.js.sig`:产物本体由每个版本的 `plugin.js.sig` 独立签名,清单只描述元数据。
 - `tags.json` 可选:存在就必须被 L1 清单覆盖,不存在则不报错、也不进清单。
 - `meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`,`plugin.js.author.sig` 可选保留。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖。若作者沿用 `dsc-plugin-template` 的产物,该模板会一并产出 `meta.json.author.sig`,本仓库不收录这个文件。
 
 三层之间不做收束:L1 不引用 L2,L2 不引用 L3,任何一层都可以单独发布、单独校验、单独重签。取舍是放弃「一次校验拿到全树摘要」,换取按插件增量更新:改一个插件只需 L3 的 `revision` 加一,L2 与 L1 的 `revision` 不变,客户端也只重新拉取这一层的清单与签名。若把三层收束成一份根清单,任何插件发版都会改动根清单,所有客户端都得重拉整份摘要。
 
-pages 包是构建产物,不提交回仓库:每次 Release 全量重建并整体替换,仓库里不保留 `plugins.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig`,也不放空基线来喂仓库级校验。因此每层的 `revision` 不能在源码树里沿用,只能按层从已发布站点的同名 `manifest.json` 读取:文件集合与哈希都没变时沿用旧值,有变化时加一。
+pages 包是构建产物,不提交回仓库:每次 Release 全量重建并整体替换,仓库里不保留 `plugins.json`、`plugins/` 下的插件数据、`manifest.json` 与 `manifest.json.sig`,也不放空基线来喂仓库级校验。因此每层的 `revision` 不能在源码树里沿用,改由 `ci-memory` 分支承载上一版:本次清单在发布前写回该分支的 `layer-manifests/`,下一次构建按层从中读回,文件集合与哈希都没变时沿用旧值,有变化时加一。读回来源当前仍是已发布站点的同名 `manifest.json`,改为 `ci-memory` 属下一步实现。
 
 ## 必需文件
 
@@ -365,7 +365,7 @@ awesome-dsc-plugin/
     └── src/                            站点源码:index.html 与 assets/
 ```
 
-仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与工程文件;`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omds-chat/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
+仓库根只有 `catalog/`、`certs/`、`schemas/`、`scripts/`、`site/` 五个目录与工程文件;`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库;`single-branch/` 存放 `ci-memory` 分支的本地工作区,同样不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [awesome-dsc-plugin-set-template](https://github.com/omds-chat/awesome-dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
 
 ## 合集元数据
 

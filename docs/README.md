@@ -13,7 +13,7 @@
 | [.github/bundle-layout.README.md](../.github/bundle-layout.README.md) | 插件树结构说明 | plugins/ 三层目录的必需文件、versions.json 结构、meta.json 字段与命名规则 | 核对插件树布局、确认某层该有哪些文件、改版本元数据字段 | 维护者、贡献者 |
 | [schemas/README.md](../schemas/README.md) | JSON Schema 索引 | 六份 schema 的约束对象与要点、约束范围、结构合法与收录通过的区别 | 改字段、加校验、判断某份 JSON 结构是否合法 | 维护者、Agent |
 | [site/README.md](../site/README.md) | 站点工程说明 | 合集设置的唯一位置、页面读取顺序与逐级回落、构建与展示约定 | 改站点、排查页面数据缺失或显示异常 | 维护者 |
-| [docs/design/collection-pipeline.md](design/collection-pipeline.md) | 流水线机制与取舍的设计说明 | catalog 驱动模型、三层清单职责与 revision 语义、清单入库与归档分支、证书位置、异常剔除、站点关系、与内部合集的差异、已否决方案、未定稿项 | 判断「为什么这样定」「这样改会不会破坏既有取舍」、评估机制变更的影响面 | 维护者、Agent |
+| [docs/design/collection-pipeline.md](design/collection-pipeline.md) | 流水线机制与取舍的设计说明 | catalog 驱动模型、三层清单职责与 revision 语义、清单入库与 ci-memory 分支、证书位置、异常剔除、站点关系、与内部合集的差异、已否决方案、未定稿项 | 判断「为什么这样定」「这样改会不会破坏既有取舍」、评估机制变更的影响面 | 维护者、Agent |
 | [docs/design/pages-artifacts.md](design/pages-artifacts.md) | pages 包逐文件职责说明 | 每个文件的生成者、消费者、签名归属、随发布是否更新与体积增长来源 | 判断某个文件能不能当作插件信息入口、调整产物清单与签名归属 | 维护者、Agent |
 | [docs/README.md](README.md) | 本索引 | 文档主表、冲突时的优先级、文档分层、维护约定 | 找文档、判断该读哪一份、新增或删除文档时 | Agent、维护者 |
 
@@ -47,6 +47,6 @@
 ## 四、维护约定
 
 - 新增或删除任何文档，同一次改动内更新本索引主表；文档改名或移动时，同时修正所有引用它的链接。
-- 机制变更当轮更新对应文档，不留到下一轮：改字段同步 schemas/README.md；改清单覆盖范围、签名归属或逐文件职责同步 docs/design/pages-artifacts.md；改 revision 语义、清单归档或层间取舍同步 docs/design/collection-pipeline.md 第二节与第八节；改流水线步骤同步 .github/pipeline.README.md。
+- 机制变更当轮更新对应文档，不留到下一轮：改字段同步 schemas/README.md；改清单覆盖范围、签名归属或逐文件职责同步 docs/design/pages-artifacts.md；改 revision 语义、清单归档或层间取舍同步 docs/design/collection-pipeline.md 第二节；改流水线步骤同步 .github/pipeline.README.md。
 - 文档与代码冲突时先按第二节判定以谁为准，再回改文档；不允许同一事实在两处各留一种说法。
 - 本索引与设计文档只描述机制、边界与读者入口，不写时间戳、不写进度、不写时间计划。

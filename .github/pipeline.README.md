@@ -11,6 +11,8 @@
 
 仓库根不再存放 `plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/`:它们是 pages 包的构建产物,只在构建出的 pages 包里出现,也不再有「空基线」。因此仓库级校验只看 `catalog/` 与 `certs/`(`pnpm verify:catalog`),pages 包的校验用 `pnpm verify:bundle`。
 
+`ci-memory` 是与之并列的孤立并行分支,存三层清单的上一版;它的本地工作区放在 `single-branch/ci-memory/`,自带 `.git`,主仓库 `.gitignore` 已忽略该目录,分支内容不进 `main`。
+
 ## 二、证书位置
 
 合集终端签名证书(EEC)的固定位置是 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,对应私钥只从 CI secret `EEC_SECRET_KEY` 注入。
@@ -64,9 +66,15 @@ catalog 与 certs 不纳入任何清单,它们是登记信息与信任材料。
 
 ## 五、revision 语义
 
-pages 不做版本留存,每个 Release 全量重建并直接替换。
-L1 的 revision 从已发布站点的 `manifest.json` 读取上一次的值:L2、L3 同理由 `plugins/<作者>/manifest.json`、
+pages 不做版本留存,每个 Release 全量重建并直接替换,源码树里留不住上一份值,因此上一版清单存在 `ci-memory` 分支:
+本仓库的一个孤立并行分支,与 `main` 无公共祖先,只承载跨构建延续的状态,不发布到 Pages,也不合并回 `main`。
+三层清单在发布前写回该分支的 `layer-manifests/`,路径与分发目录一一镜像,每层一份 `manifest.json` 与一份 `manifest.json.sig`;
+写回失败即中止本次发布,CI 报错,不沿用旧 `revision` 继续发布。写入与读取都只有流水线,人工不改分支内容;
+分支缺失时流水线报错中止,不代为创建。
+
+L1 的 revision 当前从已发布站点的 `manifest.json` 读取上一次的值:L2、L3 同理由 `plugins/<作者>/manifest.json`、
 `plugins/<作者>/<插件>/manifest.json` 读取。该层文件集合与哈希都没变时沿用旧值,有变化时加一,取不到时从 1 开始。
+读回来源将由已发布站点改为 `ci-memory` 分支的 `layer-manifests/`,属下一步实现;实现之前读回仍以线上站点为准。
 
 ## 六、本地复现
 
@@ -95,6 +103,7 @@ openssl cms -verify -binary -md sha512 -inform DER \
 
 流水线步骤依次为:安装依赖、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中即剔除该插件)、用 EEC 重新签名 `plugin.js`、生成并签名三层清单、
 组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、上报剔除项、上传并部署。
+清单写回 `ci-memory` 分支排在独立验签之后、上传并部署之前,写回失败即中止发布;这一步以及构建开始前从该分支读回 `revision`,都属下一步实现,当前读回仍以线上站点为准。
 
 ## 七、异常插件与上报
 
