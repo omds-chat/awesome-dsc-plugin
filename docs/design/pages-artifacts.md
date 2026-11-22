@@ -24,7 +24,26 @@
 
 ## 二、面向宿主侧（市场与引擎）
 
-宿主 = 插件市场与插件引擎。市场按 `README.md` 的取件表逐层取件，引擎加载 `plugin.js`。这一组是宿主取数与校验的通道。
+宿主 = 插件市场与插件引擎。市场按本节的取件表逐层取件，引擎加载 `plugin.js`。这一组是宿主取数与校验的通道。
+
+### 市场取件顺序
+
+市场先读合集元数据与插件目录，再逐层取清单、用根证书把 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` 收进信任锚，校验清单签名后再取插件文件与产物签名。下表是对外承诺的路径契约，市场按 `base_url` 依次取用。
+
+| 步骤 | 路径 | 用途 |
+|:---:|:---:|:---:|
+| 1 | `<base_url>/meta.json` | 判断该来源是否启用下载计数 |
+| 2 | `<base_url>/plugins.json` | 插件目录索引:列出全部插件、作者与标签 |
+| 3 | `<base_url>/certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt` | 取合集终端签名证书,用根证书校验证书链;根目录没有 `eec.pem` |
+| 4 | `<base_url>/manifest.json` 与 `manifest.json.sig` | 校验 L1 清单签名与其中记录的 SHA-512 |
+| 5 | `<base_url>/plugins/<author>/manifest.json` 与 `manifest.json.sig` | 校验 L2 清单,拿到作者公钥与插件清单 |
+| 6 | `<base_url>/plugins/<author>/<plugin>/manifest.json` 与 `manifest.json.sig` | 校验 L3 清单,拿到 `versions.json` 与各版本 `meta.json` 的摘要 |
+| 7 | `<base_url>/plugins/<author>/<plugin>/versions.json` | 取版本列表与最新版本号 |
+| 8 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/meta.json` | 取插件元数据,与 L3 清单记录的摘要比对 |
+| 9 | `<base_url>/plugins/<author>/<plugin>/<x.y.z>/plugin.js` 与 `plugin.js.sig` | 取插件运行时脚本,用合集证书验签 |
+| 10 | `<base_url>/plugins/<author>/author_pub.pem` 与 `plugin.js.author.sig` | 有作者签名时,取作者公钥与签名;校验失败只警告,不计为通过 |
+
+任何一项校验失败只提示警告,不阻断插件加载:分发出去之后的校验是弱校验,作者签名同理,失败只警告;警告由用户决定是否继续,市场不会替用户静默放行。
 
 | 路径 | 生成者 | 消费者 | 是否参与签名 | 是否随发布更新 | 体积随什么增长 |
 |:---:|:---:|:---:|:---:|:---:|:---:|
@@ -39,7 +58,7 @@
 | `plugins/<作者>/<插件>/manifest.json` 与 `manifest.json.sig`（L3） | `layer-manifests.mjs` | 市场（第 6 步）；CI 独立验签；`collection-verify.mjs`；`consistency-verify.mjs`；站点探测 | 清单本身不进任何清单，只被同名 `.sig` 覆盖 | 是，每次发布重写；版本增删才改变条目集合 | 随该插件版本数增长，每版本一条 `meta.json` 记录；不含 `plugin.js` |
 | `plugins/<作者>/<插件>/versions.json` | `build-from-catalog.mjs`，取自作者站点同名文件 | 市场（第 7 步取版本列表与 `latest`）；`collection-verify.mjs`；`consistency-verify.mjs`；站点第 6 步 | 参与，L3 清单覆盖 | 是，每次发布重写 | 随版本数增长，每版本一个版本号字符串 |
 | `plugins/<作者>/<插件>/<x.y.z>/meta.json` | `build-from-catalog.mjs`，从作者站点拉取后原样写出，不改写字段 | 市场（第 8 步展示字段并比对 L3 摘要）；站点详情；`dependencies` 等字段按分发规范 v2 由宿主侧读取 | 参与，L3 清单覆盖 | 是，每次发布重写 | 常数级，随字段个数与描述文本长度 |
-| `plugins/<作者>/<插件>/<x.y.z>/plugin.js` | `build-from-catalog.mjs`，从作者站点拉取原始字节；拉取后由 `plugin-network-scan.mjs` 做网络自建静态扫描，命中只警告、插件照常收录；这是收录契约，不是沙箱 | 引擎（加载执行）；市场（下载） | 不进任何清单，只由同目录 `plugin.js.sig` 覆盖 | 是，每次发布重写 | 随插件代码规模增长，单文件上限 1 MiB |
+| `plugins/<作者>/<插件>/<x.y.z>/plugin.js` | `build-from-catalog.mjs`，从作者站点拉取原始字节；拉取后由 `plugin-network-scan.mjs` 做网络自建静态扫描，命中只警告、插件照常收录；这是收录契约，不是沙箱 | 引擎（加载执行）；市场（下载） | 不进任何清单，只由同目录 `plugin.js.sig` 覆盖 | 是，每次发布重写 | 随插件代码规模增长（宿主上限 2 MB，合集不自设更严上限） |
 | `plugins/<作者>/<插件>/<x.y.z>/plugin.js.sig` | `build-from-catalog.mjs` 的 `signPlugins`，用合集 EEC 对原始字节重新签名 | 市场（第 9 步）；引擎加载前校验；CI openssl 独立验签 | 本身是签名 | 是，每次发布重签 | 常数级，CMS DER 签名与载荷大小无关 |
 | `plugins/<作者>/<插件>/<x.y.z>/plugin.js.author.sig` | 作者站点原样复制，缺失或为空只记警告 | 市场（第 10 步）；`collection-verify.mjs` 的弱校验 | 本身是作者签名；不进任何清单，也不受 EEC 覆盖 | 是，随发布复制 | 常数级，上限 64 KiB |
 
@@ -121,5 +140,5 @@
 ## 七、维护约定
 
 - 新增或删除 pages 包里的文件，先在本文登记三件事：谁生成、谁读、有没有签名归属。三者写不清的产物不应进入 pages 包。
-- 任何产物的签名归属发生变化，同时更新本文与 `collection-pipeline.md` 第二节、`README.md` 的分发结构与校验规则。
-- 本文与脚本冲突时以脚本为准，并回改本文：生成者以 `scripts/build-from-catalog.mjs` 与 `scripts/lib/` 为准，消费者以 `README.md` 的取件表、`site/src/assets/data.js` 的读取路径与 `scripts/lib/` 的校验代码为准。
+- 任何产物的签名归属发生变化，同时更新本文与 `collection-pipeline.md` 第二节、`maintenance.md` 的 pages 包结构与校验规则。
+- 本文与脚本冲突时以脚本为准，并回改本文：生成者以 `scripts/build-from-catalog.mjs` 与 `scripts/lib/` 为准，消费者以本文的市场取件顺序、`site/src/assets/data.js` 的读取路径与 `scripts/lib/` 的校验代码为准。

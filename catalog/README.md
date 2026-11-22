@@ -55,6 +55,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 - 作者签名本身是可选项,从不阻断收录:验签失败只在报告与日志里警告。作者层只是附加证据,合集已经在登记侧审核过作者与插件,判定依据是 `catalog/` 的 PR 审核与仓库级校验,没有理由用作者签名把已审核的内容拦下来。
 - 公钥与签名两侧缺一不可:只有 `plugin.js.author.sig` 没有公钥、或只有公钥没有 `plugin.js.author.sig`,都判为「未校验」,不计为通过。
 - 公钥由 L2 清单覆盖,分发时原样复制到 `plugins/<作者>/author_pub.pem`。
+- 作者签名收录的是作者构建产出的 `plugin.js.sig`,进 pages 包后写作 `plugin.js.author.sig`,与合集的 CMS 签名 `plugin.js.sig` 并存,靠文件名区分签名者;签名约定见 [docs/design/signing.md](../docs/design/signing.md)。
 
 ## plugin.json
 
@@ -111,6 +112,7 @@ openssl pkey -in author_secret.pem -pubout -out author_pub.pem
 - 不从 GitHub Release 取任何东西,Release 不放资产。
 - 站点必须公开可访问,静态资源可跨域读取。
 - 站点上每个版本目录需要 `meta.json` 与 `plugin.js`;作者自签名 `plugin.js.author.sig` 可选,CI 会原样保留。
+- 产物按 LF 换行并建议行压缩:签名覆盖文件原始字节,换行、缩进或空白的任何改动都会让校验失败;行压缩既减小体积,也避免无意义的空白差异。
 
 ## 版本层不进 catalog
 

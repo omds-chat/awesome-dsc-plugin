@@ -1,7 +1,7 @@
 # 合集流水线设计：catalog 驱动与 pages 分发
 
 > 本文说明本合集从登记到分发的机制与取舍，写给合集维护者与准备投稿的插件作者。
-> 事实以仓库内的 `README.md`、`catalog/README.md`、`.github/pipeline.README.md`、`.github/bundle-layout.README.md` 与脚本为准；本文不重复字段表，只解释为什么这样定、边界在哪里。
+> 事实以仓库内的 `catalog/README.md`、`.github/bundle-layout.README.md`、`docs/maintenance.md`、`docs/design/signing.md` 与脚本为准；本文不重复字段表，只解释为什么这样定、边界在哪里。
 > 本文不涉及任何证书材料的生成、签发、续签或替换。
 
 ## 一、catalog 驱动模型
@@ -40,7 +40,7 @@
 | 登记校验 | `catalog/` | 字段、公钥格式、标签取值、作者名与插件名规则 | 登记错误，整体中止 |
 | 读回 ci-memory | `ci-memory` 分支的 `layer-manifests/` | 按层读回上一版清单，只用于沿用 `revision`；分支里缺该层时过渡回退到已发布站点 | 分支缺失或工作区不是 git 工作区，整体中止，不代为创建 |
 | 版本发现 | 作者站点 `versions.json` | 取版本列表与 `latest`，版本号必须是三段语义化版本，`latest` 必须在列表内 | 该插件剔除 |
-| 产物拉取 | `<base_url>/<版本>/` | 取 `meta.json`、`plugin.js`（单文件 1 MB 上限）与可选 `plugin.js.author.sig` | 该插件剔除；作者签名取不到或为空只记警告，不影响该插件 |
+| 产物拉取 | `<base_url>/<版本>/` | 取 `meta.json`、`plugin.js`（宿主上限 2 MB，合集不自设更严上限）与可选 `plugin.js.author.sig` | 该插件剔除；作者签名取不到或为空只记警告，不影响该插件 |
 | 元数据对齐 | 远端 `meta.json` | 名称与登记一致、版本号与目录名一致、产物非空 | 该插件剔除 |
 | 产物网络自审 | 每个 `plugin.js` 的文本 | 扫描全局 `fetch(`、`XMLHttpRequest`、`WebSocket`、`EventSource`、`navigator.sendBeacon` 与 `import()` 远程地址 | 只记警告，插件照常收录；这是收录契约，不是沙箱 |
 | 重新签名 | 每个 `plugin.js` | 用合集终端签名证书生成 `plugin.js.sig` | 构建失败 |
@@ -86,7 +86,7 @@
 
 | 项 | 结论 |
 |:---:|:---:|
-| 检测对象 | 版本目录里的 `plugin.js` 文本，单文件上限 1 MiB |
+| 检测对象 | 版本目录里的 `plugin.js` 文本（宿主上限 2 MB，合集不自设更严上限） |
 | 命中写法 | 全局 `fetch(`（含 `window`、`globalThis`、`self`、`global` 限定）、`XMLHttpRequest`、`WebSocket`、`EventSource`、`navigator.sendBeacon` 与裸 `sendBeacon(`，以及以 `http://`、`https://`、`//` 开头的 `import(` |
 | 不命中 | 方法名前是点号的调用，例如 `context.net.fetch(...)`、`net.fetch(...)`；插件转发或包装宿主网络能力因此不受影响 |
 | 问题代码 | `PLUGIN_NETWORK_SELFTALK`，级别为警告，每条带命中的字面量与行、列，同一文件最多逐条列出 20 条 |
@@ -178,7 +178,7 @@
 | 是否每个合集各自一个分支 | 每仓库一个分支 | 本仓库只承载一个合集，写回与读回都不会跨合集冲突，`layer-manifests/` 下不再按合集分目录 |
 | 写回失败时如何处理 | 中止本次发布，CI 报错，不沿用旧 `revision` 继续发布 | 沿用旧值会让该层计数不单调，两个不同内容共用一个 revision；中止则把 `ci-memory` 的可用性变成发布的硬依赖，这是可接受的代价 |
 
-本节结论与 `README.md`、`README.en-US.md` 的 `revision` 条文、`.github/pipeline.README.md` 第五节与 `catalog/README.md` 的同名条文保持一致。
+本节结论与 `docs/maintenance.md` 的 revision 语义一节及 `catalog/README.md` 的同名条文保持一致。
 
 ### 2.5 `catalog/` 与 `certs/` 不进任何清单
 
@@ -420,12 +420,14 @@
 
 | 文档 | 职责 |
 |:---:|:---:|
-| `README.md` | 分发结构、签名与校验规则的完整叙述 |
+| `README.md` | 合集对外的门面:定位、收录范围与最小可用步骤 |
 | `catalog/README.md` | 作者侧登记、收录后处理与下架流程 |
-| `.github/pipeline.README.md` | 流水线步骤、pages 包结构与异常上报 |
+| `docs/maintenance.md` | 流水线步骤、pages 包结构、pages 包校验规则与异常上报 |
+| `docs/design/signing.md` | 签名体系:角色、证书链、签名命令与作者自签名 |
 | `.github/bundle-layout.README.md` | 插件树的必需文件、版本列表与 `meta.json` 字段 |
 | `schemas/README.md` | 各份 JSON Schema 的约束对象与边界 |
 | `site/README.md` | 站点工程的数据来源、构建与展示约定 |
+| `scripts/README.md` | scripts/ 与 scripts/lib/ 的逐文件职责 |
 | `docs/design/pages-artifacts.md` | pages 包逐文件的生成者、消费者、签名归属与体积增长来源 |
 | `docs/README.md` | 全部文档的索引入口、冲突时的优先级、文档分层与维护约定 |
 
