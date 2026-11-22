@@ -66,7 +66,7 @@ function usage() {
     '  --help             显示本说明',
     '',
     '环境变量:',
-    '  NPM_REGISTRY_URL   npm registry 地址,等价于 --registry;离线联调指向 scripts/dev/npm-registry-mock.mjs(见 README「本地校验」)',
+    '  NPM_REGISTRY_URL   npm registry 地址,等价于 --registry;离线联调指向组织仓工具 .github/tools/dev-local-npmjs/dev-local-npmjs.mjs(见 README「本地校验」)',
     '',
   ].join('\n'))
 }

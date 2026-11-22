@@ -25,8 +25,8 @@ export const AUTHOR_PUB_FILE = 'author_pub.pem'
 export const PLUGIN_FILE = 'plugin.json'
 /** 版本列表文件名 */
 export const VERSIONS_FILE = 'versions.json'
-/** plugin.js 字节上限:1 MB */
-export const MAX_PLUGIN_BYTES = 1024 * 1024
+/** plugin.js 字节上限:2 MB,与宿主的 2 MB 上限对齐,合集不自设更严上限 */
+export const MAX_PLUGIN_BYTES = 2097152
 /** 作者签名文件字节上限 */
 export const MAX_SIGNATURE_BYTES = 64 * 1024
 /** 远程请求默认超时 */
@@ -232,7 +232,8 @@ export function readCatalog({ catalogDir, problems, checkAuthorNames = true }) {
       if (data !== undefined) {
         if (typeof data?.username !== 'string' || data.username.length === 0) {
           problems.push(problem('error', 'AUTHOR_FIELD_INVALID', authorRel + '/' + AUTHOR_FILE + ' 的 username 必须是非空字符串', authorRel + '/' + AUTHOR_FILE))
-        } else if (data.username !== username) {
+        // 作者名判定大小写不敏感:username 与目录名仅大小写不同时视为同一名称,不算不一致
+        } else if (data.username.toLowerCase() !== username.toLowerCase()) {
           problems.push(
             problem(
               'error',

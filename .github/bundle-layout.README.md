@@ -1,61 +1,18 @@
-# 插件树
+# 插件树(本仓增量)
 
-本文说明 pages 包 `plugins/` 目录的结构与必需文件。仓库根没有 `plugins/` 目录:插件树是构建产物,只在构建出的 pages 包里出现,本仓库只保留这份说明。
+本文只写本仓相对权威出处的增量,布局条文以权威文为准。权威文是模板仓 `dsc-plugin-set-template` 的 `template/plugins/README.md`(位于组织工作区):作者、插件、版本三层目录的命名与每层必需文件、作者名规则、插件名规则、清单格式与空基线约定,都以该文为准,本文不再重复;增量与权威文冲突时以权威文为准。
 
-`plugins/` 存放合集收录的全部插件,按「作者 / 插件 / 版本」三层组织。每层一份 `manifest.json` 与一份 `manifest.json.sig`:清单记录本层文件的 SHA-512,签名由根 CA 签发的终端签名证书(EEC)生成。产物本体另有每版本的 `plugin.js.sig`,作者可选地用自有密钥追加一份裸公钥分离签名。
+`plugins/` 是构建产物:仓库根没有这个目录,分发包每次 Release 全量重建,本仓库只保留这份说明。三层的目录名、必需文件与清单签名者都见权威文,本文不重复。
 
-## 作者目录
+## 作者目录(增量)
 
-`plugins/<author>/`
+- 作者目录名允许大小写字母;判定两个作者名是否同一名称时大小写不敏感:仅大小写不同的两个目录视为同名,收录与校验都按重复处理。构建与仓库级校验对这种重复报 `AUTHOR_NAME_COLLISION`,要求只保留一个目录后重新提交。
+- 作者公钥由插件作者提供,登记在本仓 `catalog/<作者>/author_pub.pem`,构建时复制到 pages 包的 `plugins/<作者>/author_pub.pem`;不要在合集里手工生成。缺失时校验只给警告,该作者带 `plugin.js.author.sig` 的版本判为未校验。
+- 作者层只是附加证据:合集已在登记侧审核过作者与插件,作者签名从不阻断收录,验签失败也只警告。公钥与签名两侧缺一不可,只有一侧不算通过。
 
-- 目录名即作者用户名,必须与 `plugins.json` 的 `author`、`plugins/author_manifest.json` 的 `username` 完全一致。
-- 作者名按 GitHub 用户名规则校验,字母不区分大小写:只允许字母、数字与连字符,不得以连字符开头或结尾,长度 1 到 39 字符。构建与仓库级校验都按这条规则检查,不合法时报错并指出是哪个目录。同一个用户的目录只能出现一次:`Alice` 与 `alice` 仅大小写不同,属同一个 GitHub 用户,构建与仓库级校验都会报错并点名冲突的两个目录。
+## 版本目录(增量)
 
-| 文件 | 必需 | 说明 |
-|:---:|:---:|:---:|
-| `plugin_manifest.json` | 是 | 该作者的插件名数组,例如 `["dsc-demo"]` |
-| `author_pub.pem` | 否 | 作者公钥,OpenSSL PEM,Ed25519。与 `plugin.js.author.sig` 配对校验:只有签名没有公钥、或只有公钥没有签名,都判为未校验,只警告 |
-| `manifest.json` | 是 | L2 清单,覆盖本目录的 `author_pub.pem` 与 `plugin_manifest.json`,文件存在才覆盖 |
-| `manifest.json.sig` | 是 | L2 清单的 CMS 分离签名,由 EEC 生成 |
-
-作者公钥由插件作者提供,登记在 `catalog/<作者>/author_pub.pem`,构建时复制到 pages 包的 `plugins/<作者>/author_pub.pem`。不要在合集里手工生成。缺失时校验只给警告,该作者带 `plugin.js.author.sig` 的版本判为未校验。
-
-作者层只是附加证据:合集已在登记侧审核过作者与插件,作者签名从不阻断收录,验签失败也只警告。公钥与签名两侧缺一不可,只有一侧不算通过。
-
-## 插件目录
-
-`plugins/<author>/<plugin>/`
-
-- 目录名取插件 npm 包名去掉命名空间前缀:`dsc-demo` 写作 `dsc-demo`,`@alice/dsc-demo` 同样写作 `dsc-demo`。
-- 插件名必须以 `dsc-` 为前缀,写成 `dsc-xxx` 或 `@scope/dsc-xxx`,仅允许小写字母、数字、点、下划线、连字符。构建与仓库级校验都按这条规则检查,不带 `dsc-` 前缀的插件名会被拒绝。
-- 目录内必需 `versions.json`:
-
-```json
-{
-  "latest": "1.0.0",
-  "versions": ["1.0.0", "0.9.0"]
-}
-```
-
-- `latest` 必须出现在 `versions` 内;`versions` 由收录脚本按版本号降序写入且不重复,手工修改时保持同样的顺序。
-- 目录内另有 `manifest.json` 与 `manifest.json.sig`,即 L3 清单,覆盖 `versions.json` 与每个版本的 `meta.json`。L3 不覆盖 `plugin.js` 与 `plugin.js.sig`,产物本体由每版本的 `plugin.js.sig` 独立签名。
-
-## 版本目录
-
-`plugins/<author>/<plugin>/<x.y.z>/`
-
-| 文件 | 必需 | 签名者 | 说明 |
-|:---:|:---:|:---:|:---:|
-| `meta.json` | 是 | 无 | 插件运行时元数据,由 L3 清单覆盖,不再单独签名 |
-| `plugin.js` | 是 | 无 | 插件运行时脚本,单文件 ESM,使用 LF 换行。收录前做网络自建静态扫描,出现全局 `fetch(`、`XMLHttpRequest`、`WebSocket`、`EventSource`、`navigator.sendBeacon` 或 `import()` 远程地址即报 `PLUGIN_NETWORK_SELFTALK` 警告,只警告、不阻断收录;这是收录契约,不是沙箱 |
-| `plugin.js.sig` | 是 | 本仓库 EEC | `plugin.js` 的 CMS 分离签名,由 CI 的 `build-from-catalog.mjs` 重新生成 |
-| `plugin.js.author.sig` | 否 | 插件作者 | `plugin.js` 的裸公钥分离签名,随插件产物提供。与 `plugins/<author>/author_pub.pem` 配对:两侧齐全才用 `openssl pkeyutl -verify` 校验,验签失败只警告;只有一侧时判为未校验 |
-
-`meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖;若作者沿用 `dsc-plugin-template` 的产物,该模板会一并产出 `meta.json.author.sig`,本仓库不收录这个文件。
-
-CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范化。任何一字节差异(包括 LF 与 CRLF 的差别)都会让校验失败。
-
-`meta.json` 的字段:
+`meta.json` 由 L3 清单覆盖、不接受单独签名,这一条权威文已约定;本仓增量是它的字段表:
 
 | 字段 | 类型 | 说明 |
 |:---:|:---:|:---:|
@@ -71,42 +28,15 @@ CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范
 
 校验脚本强制 `name` 与 `version` 分别与 `plugins.json`、目录名一致;其余字段由分发规范 v2 要求,市场展示插件时读取。
 
-## 清单
+`meta.json.sig` 与 `meta.json.author.sig` 已取消:版本目录里的合集签名只剩 `plugin.js.sig`。`meta.json` 由 L3 清单覆盖并由合集 EEC 绑定,作者公钥本身由 L2 覆盖;若作者沿用 `dsc-plugin-template` 的产物,该模板会一并产出 `meta.json.author.sig`,本仓库不收录这个文件。
 
-每层清单格式一致,JSON Schema 见 `schemas/manifest.schema.json`:
+`plugin.js.sig` 由本仓 CI 的 `scripts/build-from-catalog.mjs` 按 catalog 拉取后对 `plugin.js` 原始字节重新生成;CMS 签名与作者签名都是对文件原始字节的签名,不做换行规范化,任何一字节差异(包括 LF 与 CRLF 的差别)都会让校验失败。
 
-```json
-{
-  "schemaVersion": 1,
-  "revision": 1,
-  "files": [
-    { "path": "versions.json", "sha512": "<128 位小写十六进制>" }
-  ]
-}
-```
+## 证书与 certs 目录(增量)
 
-- `path` 相对清单所在目录,正斜杠分隔,不含 `..`,不指向清单自身。
-- `revision` 每层独立:该层文件集合或内容变化时加一,不变时沿用旧值;上一份值按层从 `ci-memory` 分支的 `layer-manifests/` 读回,分支里没有该层时才回退到已发布站点的同名 `manifest.json`,仍取不到时从 1 开始。本次清单在发布前写回该分支的 `layer-manifests/`,写回失败即中止发布。
-- pages 包内的清单与签名由构建生成,不提交到仓库。
+- 合集证书的固定位置是 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,配对公钥是 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec-secret.pub`;pages 根目录不放 `eec.pem`。
+- `certs/` 下只放来源文件夹:文件夹名即来源 id,证书与公钥都在 `certs/<来源 id>/<文件名>` 下,文件名以 `<来源 id>-` 开头。
 
-## 目录示例
+## 清单 revision 的读回(增量)
 
-```text
-plugins/
-  alice/
-    author_pub.pem
-    plugin_manifest.json
-    manifest.json
-    manifest.json.sig
-    dsc-demo/
-      versions.json
-      manifest.json
-      manifest.json.sig
-      1.0.0/
-        meta.json
-        plugin.js
-        plugin.js.sig
-        plugin.js.author.sig
-```
-
-pages 包根目录另有 `meta.json`、`tags.json`、`plugins.json`,以及 L1 清单 `manifest.json` 与 `manifest.json.sig`,含义见根目录 [README](../README.md)。仓库内不存放 `eec.pem`,合集证书只在 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`;`certs/` 下只放来源文件夹,证书与公钥都在 `certs/<来源 id>/<文件名>` 下。
+每层清单的格式见 `schemas/manifest.schema.json`,覆盖范围与空基线约定以权威文为准。本仓增量是 `revision` 的读回与写回:上一份值按层从 `ci-memory` 分支的 `layer-manifests/` 读回,分支里没有该层时才回退到已发布站点的同名 `manifest.json`,仍取不到时从 1 开始;本次清单在发布前写回该分支,写回失败即中止发布。pages 包内的清单与签名由构建生成,不提交到仓库。

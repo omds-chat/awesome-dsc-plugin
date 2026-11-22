@@ -61,7 +61,7 @@ awesome-dsc-plugin/
 
 ## 二、证书位置
 
-合集终端签名证书(EEC)的固定位置是 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,对应私钥只从 CI secret `AWESOME_DSC_PLUGIN_EEC_SECRET` 注入,脚本在本地取环境变量 `EEC_SECRET_KEY`(PEM 文本或文件路径)。
+合集终端签名证书(EEC)的固定位置是 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,对应私钥只从 CI secret `AWESOME_DSC_PLUGIN_EEC_SECRET` 注入:工作流在调用构建脚本的那一步把该 secret 映射为环境变量 `EEC_SECRET_KEY`,脚本只读这个环境变量(PEM 文本或文件路径);本地复现时自行设置 `EEC_SECRET_KEY`。
 `certs/` 下只允许来源文件夹,证书与公钥放在 `certs/<来源 id>/<文件名>` 下,文件夹名即来源 id,文件名以 `<来源 id>-` 开头:证书是 `<来源 id>-eec.crt`,配对公钥是 `<来源 id>-eec-secret.pub`。私钥一律不入库,仓库级校验会拦住散落在 `certs/` 根上的文件、命名不合规的文件与非证书非公钥的材料。
 pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `secrets.DS_CHAT_ROOT_CA` 或 `vars.ROOT_CA_URL` 提供,只用于自检。
 

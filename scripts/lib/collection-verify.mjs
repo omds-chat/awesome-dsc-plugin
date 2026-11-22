@@ -609,10 +609,11 @@ export function verifyCollection(collectionDir, options = {}) {
           if (typeof item.profile !== 'string' || item.profile.length === 0) {
             report.error('AUTHOR_MANIFEST_INVALID', label + ' 缺少合法的 profile', 'plugins/author_manifest.json')
           }
-          if (registeredAuthors.has(item.username)) {
+          // 作者名判定大小写不敏感:仅大小写不同的登记视为同一作者,按重复处理
+          if (registeredAuthors.has(item.username.toLowerCase())) {
             report.warn('AUTHOR_MANIFEST_DUPLICATE', '作者 ' + item.username + ' 在 author_manifest.json 中重复登记', 'plugins/author_manifest.json')
           }
-          registeredAuthors.add(item.username)
+          registeredAuthors.add(item.username.toLowerCase())
         }
       }
     }
@@ -622,7 +623,7 @@ export function verifyCollection(collectionDir, options = {}) {
   const authorCache = new Map()
   for (const entry of entries) {
     const author = entry.author
-    if (!registeredAuthors.has(author)) {
+    if (!registeredAuthors.has(author.toLowerCase())) {
       report.warn('AUTHOR_NOT_REGISTERED', '作者 ' + author + ' 未在 plugins/author_manifest.json 中登记', 'plugins/author_manifest.json')
     }
     if (!authorCache.has(author)) {

@@ -41,7 +41,7 @@ function usage() {
     '',
     '环境变量:',
     '  ROOT_CA_PATH                根证书路径,等价于 --root-ca',
-    '  NPM_REGISTRY_URL            npm registry 地址,等价于 --registry;离线联调指向 scripts/dev/npm-registry-mock.mjs(见 README「本地校验」)',
+    '  NPM_REGISTRY_URL            npm registry 地址,等价于 --registry;离线联调指向组织仓工具 .github/tools/dev-local-npmjs/dev-local-npmjs.mjs(见 README「本地校验」)',
     '',
   ].join('\n'))
 }

@@ -145,6 +145,10 @@ jobs:
       # 三层清单的上一版按层从 ci-memory 分支的 layer-manifests/ 读回,分支优先;
       # 分支里没有该层时才回退到已发布站点的同名 manifest.json,仍取不到时该层 revision 从 1 开始。
       - name: Pull plugins and assemble pages
+        env:
+          # 构建脚本约定读环境变量 EEC_SECRET_KEY(scripts/build-from-catalog.mjs 的 prepareSigner),
+          # 本仓登记的 secret 名是 AWESOME_DSC_PLUGIN_EEC_SECRET,在这里把 secret 映射成脚本约定的变量名
+          EEC_SECRET_KEY: ${{ secrets.AWESOME_DSC_PLUGIN_EEC_SECRET }}
         run: |
           set -euo pipefail
           published="${PUBLISHED_BASE_URL:-https://${GITHUB_REPOSITORY_OWNER}.github.io/${GITHUB_REPOSITORY#*/}/}"
