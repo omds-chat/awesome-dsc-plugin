@@ -60,7 +60,7 @@ dsc 的社区插件合集。插件在这里按分发规范 v2 收录、签名并
 └── plugins/                     # 插件树:作者 / 插件 / 版本三层,各层清单与签名
 ```
 
-pages 包全貌、各位置的必需与可选文件、清单覆盖范围与 `revision` 语义见 [docs/maintenance.md](docs/maintenance.md);插件树的目录命名、`versions.json` 结构与 `meta.json` 字段见 [.github/bundle-layout.README.md](.github/bundle-layout.README.md);`catalog/` 与 `certs/` 不纳入任何清单,前者是收录登记,后者是信任材料。
+pages 包全貌、各位置的必需与可选文件、清单覆盖范围与 `revision` 语义见 [docs/maintenance.md](docs/maintenance.md);插件树的目录命名、`versions.json` 结构与 `meta.json` 字段见 [.github/bundle-layout.README.md](.github/bundle-layout.README.md);`catalog/` 与 `certs/` 不纳入任何清单,前者是收录登记,后者是信任材料。部署出去的站点树、入口地址与版本留存形态见 [docs/design/pages-artifacts.md](docs/design/pages-artifacts.md) 的「Pages 环境文件结构与部署形态」。
 
 ## 仓库目录结构
 
@@ -75,7 +75,7 @@ awesome-dsc-plugin/
 └── site/           # 合集设置与静态展示站点工程
 ```
 
-各目录的内部结构见各自的说明:`catalog/README.md`、`docs/README.md`、`schemas/README.md`、`scripts/README.md`、`site/README.md`。工程文件是 `package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.gitattributes`(统一 LF 换行)与 `.gitignore`。`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 不入库,它们只在构建出的 pages 包里出现。
+各目录的内部结构见各自的说明:`catalog/README.md`、`docs/README.md`、`schemas/README.md`、`scripts/README.md`、`site/README.md`。工程文件是 `package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`.gitattributes`(统一 LF 换行)与 `.gitignore`。`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 不入库,它们只在构建出的 pages 包里出现。分支结构(`main` 与孤立并行分支 `ci-memory`)见 [docs/maintenance.md](docs/maintenance.md) 的「分支结构」。
 
 ## 跨域访问
 

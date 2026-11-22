@@ -60,7 +60,7 @@ The collection is published as a pages bundle: CI pulls the plugins registered i
 └── plugins/                     # plugin tree: author / plugin / version, with per-layer manifests and signatures
 ```
 
-The full bundle tree, the required and optional files of each location, the manifest coverage and the `revision` semantics are documented in [docs/maintenance.md](docs/maintenance.md); directory naming, the `versions.json` shape and the `meta.json` fields in [.github/bundle-layout.README.md](.github/bundle-layout.README.md); `catalog/` and `certs/` are covered by no manifest — the first is registration data, the second trust material.
+The full bundle tree, the required and optional files of each location, the manifest coverage and the `revision` semantics are documented in [docs/maintenance.md](docs/maintenance.md); directory naming, the `versions.json` shape and the `meta.json` fields in [.github/bundle-layout.README.md](.github/bundle-layout.README.md); `catalog/` and `certs/` are covered by no manifest — the first is registration data, the second trust material. The deployed site tree, the entry URL and the version-retention shape are documented in the "Pages environment file structure and deployment" section of [docs/design/pages-artifacts.md](docs/design/pages-artifacts.md).
 
 ## Repository layout
 
@@ -75,7 +75,7 @@ awesome-dsc-plugin/
 └── site/           # collection settings and the showcase site project
 ```
 
-Each directory documents its own internals: `catalog/README.md`, `docs/README.md`, `schemas/README.md`, `scripts/README.md` and `site/README.md`. The engineering files are `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.gitattributes` (LF line endings everywhere) and `.gitignore`. `plugins.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are never committed; they exist only inside the built pages bundle.
+Each directory documents its own internals: `catalog/README.md`, `docs/README.md`, `schemas/README.md`, `scripts/README.md` and `site/README.md`. The engineering files are `package.json`, `pnpm-lock.yaml`, `pnpm-workspace.yaml`, `.gitattributes` (LF line endings everywhere) and `.gitignore`. `plugins.json`, `manifest.json`, `manifest.json.sig` and `plugins/` are never committed; they exist only inside the built pages bundle. The branch structure (`main` and the orphan parallel branch `ci-memory`) is documented in the "Branch structure" section of [docs/maintenance.md](docs/maintenance.md).
 
 ## Cross-origin access
 

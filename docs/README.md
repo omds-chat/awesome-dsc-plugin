@@ -10,10 +10,10 @@
 | [README.en-US.md](../README.en-US.md) | 上一行的英文版本 | 与 README.md 对应的英文叙述,标题集合与顺序一一对应 | 需要英文说明或对外沟通时 | 用户、贡献者 |
 | [catalog/README.md](../catalog/README.md) | 收录登记的唯一入口说明 | 登记目录结构、author.json、author_pub.pem 与 plugin.json 的字段与提交流程、收录后处理、下架与 removed.json | 提交收录、修改登记、撤回或下架插件时 | 贡献者 |
 | [.github/bundle-layout.README.md](../.github/bundle-layout.README.md) | 插件树结构说明 | plugins/ 三层目录的必需文件、versions.json 结构、meta.json 字段与命名规则 | 核对插件树布局、确认某层该有哪些文件、改版本元数据字段 | 维护者、贡献者 |
-| [docs/maintenance.md](maintenance.md) | 维护者操作手册 | 仓库结构、证书位置、pages 包结构与必需文件、清单覆盖范围、revision 语义、pages 包校验规则与校验语义、收录与构建流水线、异常上报、自查脚本、本地校验与复现、离线联调 npm 校验 | 改流水线、复现构建、排查发布失败、跑自查脚本 | 维护者 |
+| [docs/maintenance.md](maintenance.md) | 维护者操作手册 | 仓库结构与分支结构、证书位置、pages 包结构与必需文件、清单覆盖范围、revision 语义、pages 包校验规则与校验语义、收录与构建流水线、异常上报、自查脚本、本地校验与复现、离线联调 npm 校验 | 改流水线、复现构建、排查发布失败、跑自查脚本、确认并行分支的职责与读写关系 | 维护者 |
 | [docs/design/signing.md](design/signing.md) | 签名体系设计 | 三个签名角色、证书链与曲线硬约束、签什么、签名与验签命令及 DER 取舍、作者自签名、申请 EEC、私钥管理 | 改签名约定、核对签名命令、申请或更换 EEC、判断某个签名归谁 | 维护者、Agent |
 | [docs/design/collection-pipeline.md](design/collection-pipeline.md) | 流水线机制与取舍的设计说明 | catalog 驱动模型、三层清单职责与 revision 语义、清单入库与 ci-memory 分支、证书位置、异常剔除、站点关系、与内部合集的差异、已否决方案、未定稿项 | 判断「为什么这样定」「这样改会不会破坏既有取舍」、评估机制变更的影响面 | 维护者、Agent |
-| [docs/design/pages-artifacts.md](design/pages-artifacts.md) | pages 包逐文件职责说明 | 市场取件顺序、每个文件的生成者、消费者、签名归属、随发布是否更新与体积增长来源 | 判断某个文件能不能当作插件信息入口、调整产物清单与签名归属 | 维护者、Agent |
+| [docs/design/pages-artifacts.md](design/pages-artifacts.md) | pages 包逐文件职责说明与部署后的站点结构 | 市场取件顺序、每个文件的生成者、消费者、签名归属、随发布是否更新与体积增长来源、Pages 环境文件结构(部署后的站点树、入口地址与版本留存形态) | 判断某个文件能不能当作插件信息入口、调整产物清单与签名归属、确认部署出去的站点长什么样 | 维护者、Agent |
 | [schemas/README.md](../schemas/README.md) | JSON Schema 索引 | 六份 schema 的约束对象与要点、约束范围、结构合法与收录通过的区别 | 改字段、加校验、判断某份 JSON 结构是否合法 | 维护者、Agent |
 | [site/README.md](../site/README.md) | 站点工程说明 | 合集设置的唯一位置、页面读取顺序与逐级回落、构建与展示约定 | 改站点、排查页面数据缺失或显示异常 | 维护者 |
 | [scripts/README.md](../scripts/README.md) | 脚本目录说明 | scripts/ 与 scripts/lib/ 的逐文件职责 | 找某个脚本、改脚本前确认职责边界 | 维护者、Agent |

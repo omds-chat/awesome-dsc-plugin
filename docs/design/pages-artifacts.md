@@ -137,7 +137,35 @@
 - 改 `catalog/index.json`、`catalog/anomalies.json`、`catalog/` 副本、`certs/` 或站点资源，不会有任何清单或签名发现。这些位置的可信度分别由 PR 审核、证书链与托管平台承担，不由清单承担。
 - 只验清单不能证明产物完整，客户端必须另取 `plugin.js.sig`；反过来，只验产物也证明不了元数据未被改动。
 
-## 七、维护约定
+## 七、Pages 环境文件结构与部署形态
+
+> 本节回答「部署出去的站点到底长什么样」。来源以 `.github/workflows/build-and-deploy.yml` 与 `scripts/build-from-catalog.mjs` 的实际行为为准；每个位置的逐文件职责见前几节的表格，必需与可选文件清单见 `docs/maintenance.md` 第三节。
+
+### 站点根与入口地址
+
+CI 把组装完的 pages 包整体作为 GitHub Pages 的站点根上传部署（`build-and-deploy.yml` 的 Upload artifact 与 Deploy to Pages 两步，包目录固定为 `dist/pages`）。站点根就是 pages 包根，两者之间没有额外的包装层。入口地址默认是 `https://omds-chat.github.io/awesome-dsc-plugin/`，可用仓库变量 `vars.PUBLISHED_BASE_URL` 覆盖；市场取件表里的 `<base_url>` 即这个入口地址。
+
+### 部署后的站点树
+
+```text
+<base_url>/                            # 站点根 = pages 包根，每次 Release 全量重建并整体替换
+├── index.html                         # 构建产物：站点入口页面，由 site/src/index.html 改写资源路径
+├── .nojekyll                          # 构建产物：空文件，关闭 GitHub Pages 的 Jekyll 处理
+├── assets/                            # 构建产物：页面 ES 模块与样式，不含任何收录数据
+├── meta.json                          # 清单覆盖（L1）：合集元数据，取自 site/meta.json
+├── tags.json                          # 清单覆盖（L1）：预设标签，取自 site/tags.json
+├── plugins.json                       # 清单覆盖（L1）：插件目录索引，由 catalog 生成
+├── manifest.json(.sig)                # 清单与签名文件：L1 清单及其 EEC 签名
+├── catalog/                           # 索引与登记副本：index.json 与 anomalies.json 是构建生成的汇总索引；其余是 catalog/ 登记复制，全部不进任何清单
+├── certs/                             # 信任材料：合集 EEC 证书与配对公钥，原样复制，不进任何清单
+└── plugins/                           # 清单覆盖（L1/L2/L3）+ 产物签名：author_manifest.json、各层 manifest.json(.sig) 与各版本 meta.json、plugin.js(.sig)
+```
+
+### 版本化路径
+
+本仓没有版本目录：每次 Release 全量重建 pages 包并整体替换，不做版本留存（`build-and-deploy.yml` 开头的分发模型注释与本文第一节第一条事实）。部署后的站点里不存在 `/version/<tag>/` 这样的版本快照路径，需要旧版产物时只能回到触发那次发布的 Release。组织主线仓库把归档分支的 `version/` 释放合并进站点、以 `/version/<tag>/` 提供版本快照的机制属于主线仓库的分支结构；本仓没有归档分支，不涉及该机制。
+
+## 八、维护约定
 
 - 新增或删除 pages 包里的文件，先在本文登记三件事：谁生成、谁读、有没有签名归属。三者写不清的产物不应进入 pages 包。
 - 任何产物的签名归属发生变化，同时更新本文与 `collection-pipeline.md` 第二节、`maintenance.md` 的 pages 包结构与校验规则。

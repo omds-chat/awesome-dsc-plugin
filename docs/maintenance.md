@@ -59,6 +59,32 @@ awesome-dsc-plugin/
 
 仓库根只有 `catalog/`、`certs/`、`docs/`、`schemas/`、`scripts/`、`site/` 六个目录与工程文件;`plugins.json`、`manifest.json`、`manifest.json.sig` 与 `plugins/` 都不入库,它们只在构建出的 pages 包里出现,页面数据、清单与签名一律在 Release 时由 CI 生成。合集设置与站点设置都在 `site/`:合集元数据是 `site/meta.json`,预设标签是 `site/tags.json`,站点工程就是 `site/`。`dist/`、`site/dist/` 与 `temp/` 是纯生成目录,不入库;`single-branch/` 存放 `ci-memory` 分支的本地工作区,同样不入库。`scripts/lib/collection-verify.mjs` 与 `scripts/pki.mjs` 的校验语义与 [dsc-plugin-set-template](https://github.com/omds-chat/dsc-plugin-set-template) 保持一致,修改脚本请先改模板再同步本仓库,避免两个仓库的校验语义分叉。
 
+### 分支结构
+
+本仓有两条分支:`main` 承载源码、登记、校验与站点工程,顶层布局见上表;`ci-memory` 是与 `main` 无公共祖先的孤立并行分支,两者历史互不相交。孤立并行分支的组织级口径见组织仓库的 `.github/docs/repo-spec/side-branches.md`。
+
+| 项 | `ci-memory` |
+|:---:|:---|
+| 职责 | 保存三层清单的上一版,供下一次构建按层沿用 `revision` |
+| 内部结构 | 只有 `README.md` 与 `layer-manifests/`:每层一份 `manifest.json` 与同名 `manifest.json.sig`,相对 pages 包根的路径原样拼在 `layer-manifests/` 之后 |
+| 谁写 | 只有流水线:`build-and-deploy.yml` 在 pages 包校验与独立验签全部通过后、上传部署之前,调 `scripts/write-ci-memory.mjs` 镜像写回并推送;人工只在建立分支与排查时提交 |
+| 谁读 | 只有流水线:`build-from-catalog.mjs` 构建前从 `layer-manifests/` 读回上一版清单以沿用 `revision`;客户端、站点与插件市场都不读本分支 |
+| 是否进 Pages | 否。本分支不进任何 pages 包,不参与部署 |
+| 本地工作区 | `single-branch/ci-memory/`,自带 `.git`,主仓库 `.gitignore` 已忽略该目录 |
+| 分支缺失时 | 检出失败即中止本次发布,流水线不代为创建分支 |
+
+```text
+ci-memory/
+├── README.md                          # 分支职责说明
+└── layer-manifests/                   # 三层清单的上一版,按分发路径镜像
+    ├── manifest.json(.sig)            # L1
+    └── plugins/
+        ├── <作者>/manifest.json(.sig)              # L2
+        └── <作者>/<插件>/manifest.json(.sig)       # L3
+```
+
+镜像规则、写回与读回的细节见 `ci-memory` 分支内的 `README.md` 与 `layer-manifests/README.md`(该分支与 `main` 无公共祖先,`main` 上没有这两份文件);机制取舍见 [design/collection-pipeline.md](design/collection-pipeline.md)。
+
 ## 二、证书位置
 
 合集终端签名证书(EEC)的固定位置是 `certs/awesome-dsc-plugin/awesome-dsc-plugin-eec.crt`,对应私钥只从 CI secret `AWESOME_DSC_PLUGIN_EEC_SECRET` 注入:工作流在调用构建脚本的那一步把该 secret 映射为环境变量 `EEC_SECRET_KEY`,脚本只读这个环境变量(PEM 文本或文件路径);本地复现时自行设置 `EEC_SECRET_KEY`。
@@ -72,7 +98,7 @@ pages 根目录不放 `eec.pem`,也不放任何私钥。根证书由 CI 通过 `
 
 | 位置 | 来源 |
 |:---:|:---:|
-| `index.html`、`assets/` | site 构建产物 |
+| `index.html`、`assets/`、`.nojekyll` | site 构建产物 |
 | `meta.json`、`tags.json` | 取自 `site/meta.json` 与 `site/tags.json`,原样复制 |
 | `plugins.json` | 插件目录索引,由 `scripts/build-from-catalog.mjs` 按 catalog 生成 |
 | `manifest.json`、`manifest.json.sig` | L1 清单及其签名 |
@@ -85,6 +111,7 @@ pages 包全貌:
 ```text
 <collection>/                          # pages 包根目录,每次 Release 全量重建
 ├── index.html                         # 站点构建产物
+├── .nojekyll                          # 站点构建产物:空文件,关闭 GitHub Pages 的 Jekyll 处理
 ├── assets/                            # 站点构建产物:页面脚本与样式
 ├── meta.json                          # L1,合集元数据,含下载计数开关
 ├── tags.json                          # L1,预设标签
