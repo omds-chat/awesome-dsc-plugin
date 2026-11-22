@@ -292,6 +292,41 @@ jobs:
             commit -m "chore(ci-memory): layer manifests for ${GITHUB_REF_NAME:-unknown}"
           git -C "$CI_MEMORY_DIR" push origin "HEAD:ci-memory"
 
+      # 发布 latest 产物引用:把已通过全部校验的 dist/pages 完整快照发布到本仓 latest 分支。
+      # 宿主市场的 raw 与 jsDelivr 兜底链钉在这个引用上取件,不能裸指 main 等开发分支:
+      # 开发分支工作树只有源码没有构建产物,引用它必然 404。
+      # 与 ci-memory 回写同属「上传成功后的回写」环节:排在 Upload artifact 与 ci-memory
+      # 回写之后,作为构建作业的最后一步;deploy 作业 needs: build,本步任一命令非零退出
+      # 都会中止本次发布。分叉场景按覆盖处理:latest 是移动指针,语义就是全量替换。
+      # 实现口径:dist/pages 里有什么分支里就有什么,不携带 .git 元数据;用临时 index
+      # (GIT_INDEX_FILE/GIT_WORK_TREE)与 git 管道命令算出快照 tree,不检出分支、不改动
+      # 主工作区的 index 与工作树;内容与远端一致时跳过推送,不产生空提交,分支历史保持
+      # 一发布一提交;分支不存在时首次发布直接创建。推送是本步最后一个动作,set -euo pipefail
+      # 保证推送失败即中止,不留半套状态。
+      - name: Publish pages bundle to latest branch
+        run: |
+          set -euo pipefail
+          test -d dist/pages
+          test -n "$(ls -A dist/pages)"
+          cd dist/pages
+          # 临时 index 只装 dist/pages 的内容;tree 哈希即完整快照的指纹,与远端 latest 的 tree 比对
+          export GIT_WORK_TREE="$PWD"
+          export GIT_INDEX_FILE="$RUNNER_TEMP/latest-publish.index"
+          git read-tree --empty
+          git add -A
+          tree=$(git write-tree)
+          unset GIT_WORK_TREE GIT_INDEX_FILE
+          if git ls-remote --exit-code origin refs/heads/latest >/dev/null 2>&1; then
+            git fetch --depth 1 origin refs/heads/latest
+            remote_tree=$(git rev-parse 'FETCH_HEAD^{tree}')
+            if [ "$remote_tree" = "$tree" ]; then
+              echo "latest 分支与本次 dist/pages 内容一致($tree),跳过推送"
+              exit 0
+            fi
+          fi
+          commit=$(git commit-tree "$tree" -m "release(latest): pages bundle for ${GITHUB_REF_NAME:-unknown}")
+          git push --force origin "$commit:refs/heads/latest"
+
   deploy:
     name: Deploy Pages
     needs: build

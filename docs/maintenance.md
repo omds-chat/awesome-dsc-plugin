@@ -5,7 +5,7 @@
 
 本仓库负责把 catalog 里登记的插件拉取、重新签名并组装成可直接部署的 Pages 分发包。
 分发模型只有一种来源:插件作者自己发布的 Pages 站点(base_url),Release 不放任何资产。
-`ci-memory` 是与之并列的孤立并行分支,存三层清单的上一版;流水线把它检出到 `single-branch/ci-memory/`,本地工作区也用同一路径,该目录自带 `.git`,主仓库 `.gitignore` 已忽略它,分支内容不进 `main`。
+`ci-memory` 是与之并列的孤立并行分支,存三层清单的上一版;`latest` 是另一条孤立分支,存最新一版 pages 包的完整快照,供宿主市场的 raw 与 jsDelivr 兜底链取件。流水线把 `ci-memory` 检出到 `single-branch/ci-memory/`,本地工作区也用同一路径,该目录自带 `.git`,主仓库 `.gitignore` 已忽略它,两条分支的内容都不进 `main`。
 
 ## 一、仓库结构
 
@@ -61,7 +61,7 @@ awesome-dsc-plugin/
 
 ### 分支结构
 
-本仓有两条分支:`main` 承载源码、登记、校验与站点工程,顶层布局见上表;`ci-memory` 是与 `main` 无公共祖先的孤立并行分支,两者历史互不相交。孤立并行分支的组织级口径见组织仓库的 `.github/docs/repo-spec/side-branches.md`。
+本仓有三条分支:`main` 承载源码、登记、校验与站点工程,顶层布局见上表;`ci-memory` 与 `latest` 都是孤立分支,与 `main` 历史互不相交,也不互相合并。孤立并行分支的组织级口径见组织仓库的 `.github/docs/repo-spec/side-branches.md`。
 
 | 项 | `ci-memory` |
 |:---:|:---|
@@ -84,6 +84,16 @@ ci-memory/
 ```
 
 镜像规则、写回与读回的细节见 `ci-memory` 分支内的 `README.md` 与 `layer-manifests/README.md`(该分支与 `main` 无公共祖先,`main` 上没有这两份文件);机制取舍见 [design/collection-pipeline.md](design/collection-pipeline.md)。
+
+| 项 | `latest` |
+|:---:|:---|
+| 职责 | 保存最新一版 pages 包的完整快照,作为宿主市场 raw 与 jsDelivr 兜底链的数据源(Pages -> raw latest -> jsDelivr latest) |
+| 内部结构 | `dist/pages` 的原样快照,不含任何构建外内容;每次发布生成孤儿提交全量替换,`--force` 覆盖推送 |
+| 谁写 | 只有流水线:`build-and-deploy.yml` 的 `Publish pages bundle to latest branch` 步,在上传成功、`ci-memory` 回写完成之后执行;内容一致时不推送 |
+| 谁读 | 宿主市场(raw.githubusercontent.com 与 jsDelivr 钉在 `latest` 引用上取件);维护者排查 |
+| 是否进 Pages | 否。它是 Pages 站点内容的 git 引用副本,本身不参与部署 |
+| 分支缺失时 | 首次发布由流水线直接创建;不阻塞发布 |
+| 是否做版本留存 | 否。只维护「最新一版产物」一个移动指针,需要旧版产物时回到触发那次发布的 Release |
 
 ## 二、证书位置
 
@@ -229,7 +239,7 @@ L1、L2、L3 各自独立按上表读回:该层文件集合与哈希都没变时
 2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。拉取到的 `plugin.js` 先做网络自建静态扫描,命中只记警告,插件照常收录。作者签名取不到或为空按没有签名处理,只记警告,不影响该插件收录。
 3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,插件目录索引 `plugins.json` 由 catalog 生成,`catalog/`(含 `removed.json`,本次剔除的作者与插件不在其中)与 `certs/` 复制进来,再在 `catalog/` 下写入 `index.json` 与 `anomalies.json`,并按层生成、签名 L1、L2、L3 三层清单。
 4. 交叉校验:`scripts/verify-catalog-consistency.mjs` 比对 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止并列出差异。
-5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,上传成功后把新清单与签名写回 `ci-memory` 分支并推送,最后整体替换已发布站点,不做版本留存。写回失败即中止本次发布;清单内容与分支一致时不产生提交,仅 `.sig` 重签字节不同(ECDSA 随机)不算变更,保留旧签名。
+5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,上传成功后把新清单与签名写回 `ci-memory` 分支并推送,再把 `dist/pages` 的完整快照以孤儿提交覆盖推送到 `latest` 分支,最后整体替换已发布站点,不做版本留存。写回失败即中止本次发布;清单内容与分支一致时不产生提交,仅 `.sig` 重签字节不同(ECDSA 随机)不算变更,保留旧签名;`latest` 内容与上一版一致时同样跳过推送。
 
 构建把三类问题分开处理,边界写在 `scripts/build-from-catalog.mjs` 的实现与 [../catalog/README.md](../catalog/README.md) 里:
 
@@ -243,7 +253,7 @@ L1、L2、L3 各自独立按上表读回:该层文件集合与哈希都没变时
 
 插件目录索引 `plugins.json` 的 `tag` 取自每个插件 `plugin.json` 的 `tags`,`tags` 省略时为空数组。标签取值必须来自 `site/tags.json` 的预设清单;不在清单内的标签会让构建中止,并在报错里指出是哪个插件、哪个标签。
 
-流水线步骤依次为:安装依赖、检出 `main` 与 `ci-memory` 两条分支、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中只警告,不剔除插件)、用 EEC 重新签名 `plugin.js`、按层读回上一版并生成与签名三层清单、组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、上报剔除项、上传 artifacts、写回 `ci-memory` 并推送、部署。
+流水线步骤依次为:安装依赖、检出 `main` 与 `ci-memory` 两条分支、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中只警告,不剔除插件)、用 EEC 重新签名 `plugin.js`、按层读回上一版并生成与签名三层清单、组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、上报剔除项、上传 artifacts、写回 `ci-memory` 并推送、发布 `latest` 分支、部署。
 
 写回由 `scripts/write-ci-memory.mjs` 做文件镜像、由流水线用 `git` 提交并推送,命令与本地复现一致:
 
@@ -258,6 +268,10 @@ git -C single-branch/ci-memory push origin HEAD:ci-memory
 不会带着旧 `revision` 继续发布;清单与分支现有内容一致时不产生提交,也不推送。
 `ci-memory` 工作区由 `actions/checkout` 按 `ref: ci-memory` 检出,分支缺失时该步骤直接失败,不代为创建;
 工作流权限因此从 `contents: read` 改为 `contents: write`,`pages` 与 `issues` 的权限不变。
+
+`latest` 分支的发布紧跟 `ci-memory` 写回之后,同为构建作业收尾环节。步骤名 `Publish pages bundle to latest branch`:先把 `dist/pages` 写进一个临时 index(`GIT_INDEX_FILE` 与 `GIT_WORK_TREE`,不检出分支、不改动主工作区的 index 与工作树)算出快照 tree,再与远端 `latest` 的 tree 比对,一致则跳过推送;不一致(或分支尚不存在)时用 `git commit-tree` 生成孤儿提交 `release(latest): pages bundle for <tag>`,并以 `git push --force` 覆盖推送,推送是该步最后一个动作。任一命令非零退出都以 `set -euo pipefail` 中止本次发布;分叉场景按覆盖处理,分支内没有任何 `.git` 元数据之外的内容。
+
+上传 artifacts、写回 `ci-memory`、发布 `latest` 三者都排在「校验+构建+上传成功」之后,互不产生半套状态:上传失败时后两步不执行;写回或发布失败时 deploy 作业(`needs: build`)不启动,已部署站点不动。deploy 作业失败时 `ci-memory` 与 `latest` 已更新、Pages 未更新,属于可接受口径;三者顺序为 Upload artifact -> 写回 `ci-memory` -> 发布 `latest`,发布 `latest` 是构建作业最后一步。
 
 ## 八、异常插件与上报
 

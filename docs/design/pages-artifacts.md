@@ -21,6 +21,7 @@
 - `catalog/` 与 `certs/` 随包分发，但不进任何清单。前者是收录登记，后者是信任材料：登记由仓库级校验与 PR 审核保证，信任材料如果被它自己要参与验证的清单覆盖，就会形成自指。
 - 签名有两种归属。清单覆盖指被某一层 `manifest.json` 的 SHA-512 记录收进去；产物独立签名指 `plugin.js` 只由同目录的 `plugin.js.sig` 覆盖。清单本身只被同名 `.sig` 覆盖，不被任何清单覆盖。
 - 三层清单在构建、校验与 pages 包上传成功后写回本仓库的 `ci-memory` 分支的 `layer-manifests/`，只用于下一次构建沿用 `revision`；该分支不保存 pages 包本体，也不发布到 Pages，写回失败即中止发布。清单内容一致时不产生提交，仅 `.sig` 重签字节不同不算变更。机制与镜像规则见 [collection-pipeline.md](collection-pipeline.md) 的 2.4 与分支内的 `layer-manifests/README.md`。
+- `latest` 分支是 pages 包本体的 git 引用快照：构建作业在 pages 包校验、独立验签、上传成功且 `ci-memory` 回写完成后，把 `dist/pages` 的完整快照以孤儿提交全量替换推送到本仓 `latest` 分支（`--force` 覆盖，内容一致时不推送）。它不保存历史版本，只维护「最新一版产物」这一个移动指针，是宿主市场 raw 与 jsDelivr 兜底链的数据源，职责与读写关系见第二节「宿主的兜底链」。
 
 ## 二、面向宿主侧（市场与引擎）
 
@@ -44,6 +45,18 @@
 | 10 | `<base_url>/plugins/<author>/author_pub.pem` 与 `plugin.js.author.sig` | 有作者签名时,取作者公钥与签名;校验失败只警告,不计为通过 |
 
 任何一项校验失败只提示警告,不阻断插件加载:分发出去之后的校验是弱校验,作者签名同理,失败只警告;警告由用户决定是否继续,市场不会替用户静默放行。
+
+### 宿主的兜底链
+
+市场消费合集的来源优先级是 Pages -> raw -> jsDelivr:Pages 部署是首选;取不到时依次回落到 `raw.githubusercontent.com` 与 jsDelivr 对本仓 `latest` 分支的同路径取件。raw 与 jsDelivr 必须钉在 CI 维护的 `latest` 引用上,不允许裸指 `main` 一类开发分支——开发分支工作树只有源码没有构建产物,引用它必然 404。
+
+| 优先级 | 来源 | 取件方式 | 谁写 | 谁读 |
+|:---:|:---:|:---:|:---:|:---:|
+| 1 | GitHub Pages | `<base_url>/...`,即部署后的站点根 | 流水线 deploy 作业(`actions/deploy-pages`) | 市场、浏览器 |
+| 2 | raw latest | `raw.githubusercontent.com/<owner>/<repo>/latest/...` | 流水线 build 作业最后一步(`Publish pages bundle to latest branch`) | 市场兜底 |
+| 3 | jsDelivr latest | `cdn.jsdelivr.net/gh/<owner>/<repo>@latest/...` | 同上,与 raw 同源同内容 | 市场兜底 |
+
+`latest` 分支与 `main`、`ci-memory` 同为孤立分支,由流水线每次发布生成孤儿提交全量替换,`--force` 覆盖推送,分叉场景按覆盖处理;内容与上一版一致时不推送,不产生空提交。分支内容就是 `dist/pages` 的原样快照,`dist/pages` 里有什么分支里就有什么,不携带任何构建外内容。deploy 作业失败时 latest 已更新、Pages 未更新,与 `ci-memory` 回写同一口径;Pages 与 latest 短暂不一致时,raw 与 jsDelivr 兜底取到的仍是最新一版产物。
 
 | 路径 | 生成者 | 消费者 | 是否参与签名 | 是否随发布更新 | 体积随什么增长 |
 |:---:|:---:|:---:|:---:|:---:|:---:|
@@ -163,7 +176,7 @@ CI 把组装完的 pages 包整体作为 GitHub Pages 的站点根上传部署�
 
 ### 版本化路径
 
-本仓没有版本目录：每次 Release 全量重建 pages 包并整体替换，不做版本留存（`build-and-deploy.yml` 开头的分发模型注释与本文第一节第一条事实）。部署后的站点里不存在 `/version/<tag>/` 这样的版本快照路径，需要旧版产物时只能回到触发那次发布的 Release。组织主线仓库把归档分支的 `version/` 释放合并进站点、以 `/version/<tag>/` 提供版本快照的机制属于主线仓库的分支结构；本仓没有归档分支，不涉及该机制。
+本仓没有版本目录：每次 Release 全量重建 pages 包并整体替换，不做版本留存（`build-and-deploy.yml` 开头的分发模型注释与本文第一节第一条事实）。部署后的站点里不存在 `/version/<tag>/` 这样的版本快照路径，需要旧版产物时只能回到触发那次发布的 Release。组织主线仓库把归档分支的 `version/` 释放合并进站点、以 `/version/<tag>/` 提供版本快照的机制属于主线仓库的分支结构；本仓没有按版本留存的归档分支，不涉及该机制。本仓的 `latest` 分支不是版本归档：它是只指向最新一版 pages 包快照的移动指针，职责见第二节「宿主的兜底链」。
 
 ## 八、维护约定
 
