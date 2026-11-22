@@ -67,7 +67,7 @@ awesome-dsc-plugin/
 |:---:|:---|
 | 职责 | 保存三层清单的上一版,供下一次构建按层沿用 `revision` |
 | 内部结构 | 只有 `README.md` 与 `layer-manifests/`:每层一份 `manifest.json` 与同名 `manifest.json.sig`,相对 pages 包根的路径原样拼在 `layer-manifests/` 之后 |
-| 谁写 | 只有流水线:`build-and-deploy.yml` 在 pages 包校验与独立验签全部通过后、上传部署之前,调 `scripts/write-ci-memory.mjs` 镜像写回并推送;人工只在建立分支与排查时提交 |
+| 谁写 | 只有流水线:`build-and-deploy.yml` 在 pages 包校验与独立验签全部通过、上传成功之后(构建作业最后一步),调 `scripts/write-ci-memory.mjs` 镜像写回并推送;人工只在建立分支与排查时提交 |
 | 谁读 | 只有流水线:`build-from-catalog.mjs` 构建前从 `layer-manifests/` 读回上一版清单以沿用 `revision`;客户端、站点与插件市场都不读本分支 |
 | 是否进 Pages | 否。本分支不进任何 pages 包,不参与部署 |
 | 本地工作区 | `single-branch/ci-memory/`,自带 `.git`,主仓库 `.gitignore` 已忽略该目录 |
@@ -229,7 +229,7 @@ L1、L2、L3 各自独立按上表读回:该层文件集合与哈希都没变时
 2. 合并后,CI 在 Release 时按登记逐条拉取:从 `base_url` 取 `versions.json` 以及每个版本的 `meta.json`、`plugin.js` 与可选 `plugin.js.author.sig`,写入 pages 包的 `plugins/` 目录,并用合集 EEC 为每个 `plugin.js` 重新签名。拉取到的 `plugin.js` 先做网络自建静态扫描,命中只记警告,插件照常收录。作者签名取不到或为空按没有签名处理,只记警告,不影响该插件收录。
 3. 组装 pages 包:站点产物放根目录,`meta.json` 与 `tags.json` 取自 `site/`,插件目录索引 `plugins.json` 由 catalog 生成,`catalog/`(含 `removed.json`,本次剔除的作者与插件不在其中)与 `certs/` 复制进来,再在 `catalog/` 下写入 `index.json` 与 `anomalies.json`,并按层生成、签名 L1、L2、L3 三层清单。
 4. 交叉校验:`scripts/verify-catalog-consistency.mjs` 比对 `catalog/index.json`、`plugins.json`、`plugins/author_manifest.json`、`catalog/` 副本与 `plugins/` 树,任何不一致都以非零退出码中止并列出差异。
-5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,全部通过后把新清单与签名写回 `ci-memory` 分支并推送,最后整体替换已发布站点,不做版本留存。写回失败即中止本次发布。
+5. 发布:CI 先用 `openssl` 独立验签三层清单与每个 `plugin.js`,再检查 pages 包结构,上传成功后把新清单与签名写回 `ci-memory` 分支并推送,最后整体替换已发布站点,不做版本留存。写回失败即中止本次发布;清单内容与分支一致时不产生提交,仅 `.sig` 重签字节不同(ECDSA 随机)不算变更,保留旧签名。
 
 构建把三类问题分开处理,边界写在 `scripts/build-from-catalog.mjs` 的实现与 [../catalog/README.md](../catalog/README.md) 里:
 
@@ -243,7 +243,7 @@ L1、L2、L3 各自独立按上表读回:该层文件集合与哈希都没变时
 
 插件目录索引 `plugins.json` 的 `tag` 取自每个插件 `plugin.json` 的 `tags`,`tags` 省略时为空数组。标签取值必须来自 `site/tags.json` 的预设清单;不在清单内的标签会让构建中止,并在报错里指出是哪个插件、哪个标签。
 
-流水线步骤依次为:安装依赖、检出 `main` 与 `ci-memory` 两条分支、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中只警告,不剔除插件)、用 EEC 重新签名 `plugin.js`、按层读回上一版并生成与签名三层清单、组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、写回 `ci-memory` 并推送、上报剔除项、上传并部署。
+流水线步骤依次为:安装依赖、检出 `main` 与 `ci-memory` 两条分支、仓库级校验(`verify:catalog`)、构建 site、拉取插件、产物网络自审(命中只警告,不剔除插件)、用 EEC 重新签名 `plugin.js`、按层读回上一版并生成与签名三层清单、组装 pages 包、pages 包校验(`verify:bundle`,含交叉校验)、用 openssl 独立验签、结构自检、上报剔除项、上传 artifacts、写回 `ci-memory` 并推送、部署。
 
 写回由 `scripts/write-ci-memory.mjs` 做文件镜像、由流水线用 `git` 提交并推送,命令与本地复现一致:
 
@@ -254,7 +254,7 @@ git -C single-branch/ci-memory commit -m "chore(ci-memory): layer manifests for 
 git -C single-branch/ci-memory push origin HEAD:ci-memory
 ```
 
-写回排在全部校验通过之后、上传与部署之前:镜像、提交、推送任一步失败都会以非零退出码结束,部署作业依赖构建作业,本次发布因此中止,
+写回排在全部校验通过之后、上传成功之后,作为构建作业的最后一步(部署作业之前):镜像、提交、推送任一步失败都会以非零退出码结束,部署作业依赖构建作业,本次发布因此中止,上传失败时也不再把新清单推到远端,不在分支留下「已前进、站点未更新」的半套状态,
 不会带着旧 `revision` 继续发布;清单与分支现有内容一致时不产生提交,也不推送。
 `ci-memory` 工作区由 `actions/checkout` 按 `ref: ci-memory` 检出,分支缺失时该步骤直接失败,不代为创建;
 工作流权限因此从 `contents: read` 改为 `contents: write`,`pages` 与 `issues` 的权限不变。

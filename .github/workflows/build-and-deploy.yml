@@ -250,24 +250,6 @@ jobs:
           done
           echo "pages 结构检查通过"
 
-      # 写回:把新生成的三层清单与同名 .sig 按分发路径镜像进 ci-memory 工作区,提交并推送。
-      # 位置在全部校验通过之后、上传与部署之前;任一步非零退出都会中止本次发布
-      # (部署作业 needs: build),不沿用旧 revision 继续发布。内容与分支一致时不提交也不推送。
-      - name: Write manifests back to ci-memory
-        run: |
-          set -euo pipefail
-          node scripts/write-ci-memory.mjs --bundle dist/pages --ci-memory "$CI_MEMORY_DIR"
-          git -C "$CI_MEMORY_DIR" add -A
-          if git -C "$CI_MEMORY_DIR" diff --cached --quiet; then
-            echo "清单与 ci-memory 分支现有内容一致,不产生提交"
-            exit 0
-          fi
-          git -C "$CI_MEMORY_DIR" \
-            -c user.name="github-actions[bot]" \
-            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
-            commit -m "chore(ci-memory): layer manifests for ${GITHUB_REF_NAME:-unknown}"
-          git -C "$CI_MEMORY_DIR" push origin "HEAD:ci-memory"
-
       # 异常上报:只写本仓库 Issue,不进发布产物。
       # 脚本自己吞掉全部失败并以 0 退出,再加一道 continue-on-error,确保上报问题不阻塞发布。
       - name: Report excluded plugins
@@ -288,6 +270,27 @@ jobs:
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist/pages
+
+      # 写回:把新生成的三层清单与同名 .sig 按分发路径镜像进 ci-memory 工作区,提交并推送。
+      # 排在上传成功之后,作为构建作业的最后一步:镜像、提交、推送任一步非零退出都会中止
+      # 本次发布(deploy 作业 needs: build),不沿用旧 revision 继续发布;上传失败时也不再
+      # 把新清单推到远端,不在 ci-memory 留下「分支已前进、站点未更新」的半套状态。
+      # 清单内容与分支一致时不提交也不推送;仅 .sig 字节不同(EEC 对相同内容重签,
+      # CMS/ECDSA 带随机数,每次字节必然不同)不算变更,保留旧签名——旧签名对相同内容依然有效。
+      - name: Write manifests back to ci-memory
+        run: |
+          set -euo pipefail
+          node scripts/write-ci-memory.mjs --bundle dist/pages --ci-memory "$CI_MEMORY_DIR"
+          git -C "$CI_MEMORY_DIR" add -A
+          if git -C "$CI_MEMORY_DIR" diff --cached --quiet; then
+            echo "清单与 ci-memory 分支现有内容一致,不产生提交"
+            exit 0
+          fi
+          git -C "$CI_MEMORY_DIR" \
+            -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "chore(ci-memory): layer manifests for ${GITHUB_REF_NAME:-unknown}"
+          git -C "$CI_MEMORY_DIR" push origin "HEAD:ci-memory"
 
   deploy:
     name: Deploy Pages

@@ -47,7 +47,7 @@
 | 清单生成与签名 | 三层目录 | 计算 SHA-512、写 `manifest.json`、每层再生成同名 `.sig` | 构建失败 |
 | 组装 | site 产物、`catalog/`、`certs/`、`plugins/` | 拼成 pages 包，生成 `plugins.json`、`catalog/index.json`、`catalog/anomalies.json` | 构建失败 |
 | 交叉与自检 | 组装结果 | 索引与插件树一致、证书链与全部签名可验 | 构建失败 |
-| 写回 ci-memory | 三层清单 | 把本次清单写回与 `main` 无公共祖先的 `ci-memory` 分支的 `layer-manifests/`，供下次构建沿用 `revision` | 写回失败即中止本次发布，见 2.4 |
+| 写回 ci-memory | 三层清单 | 把本次清单写回与 `main` 无公共祖先的 `ci-memory` 分支的 `layer-manifests/`，供下次构建沿用 `revision`；清单内容一致时不产生提交，仅 `.sig` 重签字节不同不算变更 | 写回失败即中止本次发布，见 2.4 |
 | 上报 | `catalog/anomalies.json` | 追加到追踪 Issue | 只警告，不阻塞发布 |
 
 所有产出先落在临时目录，全部校验通过后才整体替换输出目录，因此发布不会留下半成品。三类失败与网络约定提示的边界见第四节。
@@ -153,7 +153,7 @@
 | 写回目标 | 本仓库的 `ci-memory` 分支，与 `main` 无公共祖先 |
 | 同类做法 | 与 DeepSeek-Chat-Enhanced 的 `dist-history`、`certs`、`trusted-manifest` 这类并行分支一样，把派生状态放在独立分支，`main` 只留登记与源码 |
 | CI 读取 | 已实现：构建开始前从 `ci-memory` 的 `layer-manifests/` 读回上一版清单，只用于沿用 `revision`；分支里读不到该层时过渡回退到已发布站点，写回成功后的下一版不再走回退 |
-| CI 写回 | 本次构建与全部校验通过后，把新清单写回该分支；写回失败即中止发布 |
+| CI 写回 | 本次构建、全部校验与 pages 包上传成功后（部署之前），把新清单写回该分支；写回失败即中止发布 |
 | 读回范围 | 只需要清单本体：`revision` 与 `files` 都在清单里，验签不参与本步骤 |
 
 四条取舍：

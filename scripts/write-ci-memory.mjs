@@ -4,6 +4,7 @@
  *
  * 只做文件层动作:按分发路径镜像到 <ci-memory>/layer-manifests/,清单与同名 .sig 成对写入,
  * 并删除本次不再存在的层(作者下架、插件剔除)以免旧清单被下一次构建当成现行层。
+ * 清单内容一致时不落盘,仅 .sig 重签字节不同不算变更,内容毫无变化的重跑不产生提交。
  * 提交与推送由流水线用 git 完成;本脚本不调用 git,也不发任何网络请求。
  * 写回失败以非零退出码结束,流水线据此中止发布,不沿用旧 revision。
  *
@@ -92,7 +93,7 @@ function main() {
     process.stdout.write(
       prefix + item.layer + ' 清单 ' + (item.layerRel || '合集根') + ' -> layer-manifests/' +
       (item.layerRel ? item.layerRel + '/' : '') + 'manifest.json ' +
-      (item.changed ? '(已写入,含同名 .sig)' : '(内容一致,未改动)') + '\n',
+      (item.changed ? '(已写入,清单与同名 .sig 同步更新)' : '(清单内容一致,保留旧 .sig,未改动)') + '\n',
     )
   }
   for (const removed of result.removed) {

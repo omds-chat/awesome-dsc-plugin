@@ -5,6 +5,8 @@
  * layer-manifests/ 下按分发路径一一镜像三层 manifest.json 与同名 .sig,规则见分支内的
  * layer-manifests/README.md。读回只取 schemaVersion、revision 与 files,验签不参与;
  * 写回只写清单与签名,不写任何分发内容(plugins.json、plugin.js、证书一概不动)。
+ * 仅签名不同不算变更:清单内容一致时保留分支上的旧 .sig(旧签名对相同内容依然有效),
+ * EEC 重签带来的 .sig 字节差异不会让内容毫无变化的重跑产生提交。
  *
  * 三种「读不到」的边界处理不同:
  *   工作区不存在或不是 git 工作区  分支缺失,报错中止,不代为创建;
@@ -221,13 +223,24 @@ export function writeCiMemoryManifests({ bundleRoot, branchRoot, dryRun = false 
       throw new Error(layerLabel(layer) + ' 缺少清单签名:' + source.signature + ';清单与签名必须成对写回')
     }
     const dest = layerManifestPaths(root, layer.layerRel)
+    const manifestSame = sameFile(source.manifest, dest.manifest)
+    const oldSignatureExists = existsSync(dest.signature)
     let changed
     if (dryRun) {
-      changed = !sameFile(source.manifest, dest.manifest) || !sameFile(source.signature, dest.signature)
+      // 与真实写回同一判据:清单内容变化或旧签名缺失才算改动,仅 .sig 字节不同不算。
+      changed = !manifestSame || !oldSignatureExists
     } else {
       mkdirSync(dest.dir, { recursive: true })
       const manifestChanged = copyIfChanged(source.manifest, dest.manifest)
-      const signatureChanged = copyIfChanged(source.signature, dest.signature)
+      // 仅签名不同不算变更:EEC 对相同内容重签(CMS,ECDSA 带随机数)每次字节必然不同,
+      // 清单内容一致时保留旧签名——旧签名对相同内容依然有效,清单毫无变化的重跑不再产生提交。
+      // ci-memory 的读回只取清单本体、验签不参与,保留旧签名不影响下一次构建;
+      // 只有清单变化,或旧签名缺失(补齐成对)时才写新签名。
+      let signatureChanged = false
+      if (manifestChanged || !oldSignatureExists) {
+        copyFileSync(source.signature, dest.signature)
+        signatureChanged = true
+      }
       changed = manifestChanged || signatureChanged
     }
     written.push({ layer: layer.layer, layerRel: layer.layerRel, changed })

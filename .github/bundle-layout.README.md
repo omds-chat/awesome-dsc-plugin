@@ -39,4 +39,4 @@
 
 ## 清单 revision 的读回(增量)
 
-每层清单的格式见 `schemas/manifest.schema.json`,覆盖范围与空基线约定以权威文为准。本仓增量是 `revision` 的读回与写回:上一份值按层从 `ci-memory` 分支的 `layer-manifests/` 读回,分支里没有该层时才回退到已发布站点的同名 `manifest.json`,仍取不到时从 1 开始;本次清单在发布前写回该分支,写回失败即中止发布。pages 包内的清单与签名由构建生成,不提交到仓库。
+每层清单的格式见 `schemas/manifest.schema.json`,覆盖范围与空基线约定以权威文为准。本仓增量是 `revision` 的读回与写回:上一份值按层从 `ci-memory` 分支的 `layer-manifests/` 读回,分支里没有该层时才回退到已发布站点的同名 `manifest.json`,仍取不到时从 1 开始;本次清单在 pages 包上传成功后写回并推送该分支,写回失败即中止发布;清单内容与分支一致时不产生提交,仅 .sig 重签字节不同不算变更,保留旧签名。pages 包内的清单与签名由构建生成,不提交到仓库。

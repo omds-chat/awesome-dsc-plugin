@@ -20,7 +20,7 @@
 - 每次发布全量重建 pages 包并整体替换，不做版本留存。因此「随发布更新」几乎是全表默认值，真正的差别在于字节是否变化：有的随发布标识变化，有的只在其输入或轮换时才变。
 - `catalog/` 与 `certs/` 随包分发，但不进任何清单。前者是收录登记，后者是信任材料：登记由仓库级校验与 PR 审核保证，信任材料如果被它自己要参与验证的清单覆盖，就会形成自指。
 - 签名有两种归属。清单覆盖指被某一层 `manifest.json` 的 SHA-512 记录收进去；产物独立签名指 `plugin.js` 只由同目录的 `plugin.js.sig` 覆盖。清单本身只被同名 `.sig` 覆盖，不被任何清单覆盖。
-- 三层清单在构建与校验通过后写回本仓库的 `ci-memory` 分支的 `layer-manifests/`，只用于下一次构建沿用 `revision`；该分支不保存 pages 包本体，也不发布到 Pages，写回失败即中止发布。机制与镜像规则见 [collection-pipeline.md](collection-pipeline.md) 的 2.4 与分支内的 `layer-manifests/README.md`。
+- 三层清单在构建、校验与 pages 包上传成功后写回本仓库的 `ci-memory` 分支的 `layer-manifests/`，只用于下一次构建沿用 `revision`；该分支不保存 pages 包本体，也不发布到 Pages，写回失败即中止发布。清单内容一致时不产生提交，仅 `.sig` 重签字节不同不算变更。机制与镜像规则见 [collection-pipeline.md](collection-pipeline.md) 的 2.4 与分支内的 `layer-manifests/README.md`。
 
 ## 二、面向宿主侧（市场与引擎）
 
